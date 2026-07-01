@@ -423,7 +423,11 @@ async function boot(){
   const {data:{session}}=await supa.auth.getSession();
   $('bootMsg').classList.add('hide');
   if(session){await startApp()}else{showLogin()}
-  supa.auth.onAuthStateChange((ev,s)=>{if(ev==='SIGNED_OUT'||!s){location.reload()}});
+  supa.auth.onAuthStateChange((ev, s) => {
+    if (ev === 'SIGNED_OUT') {
+      location.reload();
+    }
+  });
 }
 function showLogin(){$('loginScreen').classList.add('show');$('app').classList.add('hide')}
 async function doLogin(){
