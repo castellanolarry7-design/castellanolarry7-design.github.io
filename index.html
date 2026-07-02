@@ -228,8 +228,57 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--panel
 .seg button.on{background:var(--white);color:#000}
 #bootMsg{position:fixed;inset:0;z-index:250;display:flex;align-items:center;justify-content:center;color:var(--txt-dim);font-size:14px;text-align:center;padding:20px}
 
+/* Botón flotante (solo móvil) para agregar rápido */
+.fab{display:none;position:fixed;right:16px;bottom:16px;z-index:60;width:62px;height:62px;border-radius:50%;background:var(--white);color:#000;align-items:center;justify-content:center;box-shadow:0 10px 28px rgba(0,0,0,.55);border:none}
+.fab:active{transform:scale(.94)}
+.fab svg{width:28px;height:28px;stroke-width:2.6}
+.fab.paste{right:16px;bottom:88px;width:52px;height:52px;background:var(--panel-2);color:var(--white);border:1px solid var(--line)}
+.fab.paste svg{width:23px;height:23px}
+
 @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.parse-cols,.field-grid,.field-grid.three{grid-template-columns:1fr}.modal.wide{max-width:560px}.tabs button span{display:none}}
-@media(max-width:560px){.wrap,.top-in{padding-left:16px;padding-right:16px}.brand small,.userchip .ui{display:none}}
+
+@media(max-width:640px){
+  .wrap{padding:0 14px 120px}
+  .top-in{gap:9px;padding:11px 14px}
+  .brand small{display:none}
+  .brand h1{font-size:18px}
+  .userchip{padding:5px}
+  .userchip .ui{display:none}
+  .tabs{margin-left:2px;gap:2px;padding:3px}
+  .tabs button{padding:8px 11px}
+  .top-actions{gap:6px}
+  .hero{padding:16px 0 10px}
+  .hero h2{font-size:21px}
+  .hero p{font-size:13px}
+  .daily{gap:12px;padding:12px 14px;overflow-x:auto;margin-top:14px}
+  .daily .sep{display:none}
+  .daily .di b{font-size:17px}
+  .stats{gap:9px;margin-top:12px}
+  .stat{padding:13px}
+  .stat .num{font-size:23px}
+  .stat .lbl{font-size:11px}
+  /* Barra de herramientas: buscador ancho completo, filtros en 2, botones grandes */
+  .toolbar{padding:11px;gap:9px;margin:16px 0 14px}
+  .search{flex:1 1 100%;min-width:0}
+  .toolbar select.filter{flex:1 1 calc(50% - 5px);min-width:0;padding:12px}
+  .toolbar > .btn{flex:1 1 100%;justify-content:center;padding:14px;font-size:15px}
+  .grid{grid-template-columns:1fr;gap:12px}
+  .card{padding:16px}
+  .card-foot .btn{padding:10px}
+  .bulkbar{flex-wrap:wrap}
+  /* Modales a pantalla casi completa y cómodos */
+  .overlay{padding:10px 8px}
+  .modal{border-radius:16px}
+  .modal-head{padding:16px 16px}
+  .modal-head h3{font-size:17px}
+  .modal-body{padding:16px;max-height:80vh}
+  .modal-foot{padding:13px 16px}
+  .modal-foot .btn{flex:1;justify-content:center;padding:13px}
+  .field input,.field select,.field textarea{padding:13px 14px;font-size:16px} /* 16px evita zoom en iOS */
+  .seg{width:100%}.seg button{flex:1}
+  /* Mostrar botones flotantes */
+  .fab{display:flex}
+}
 </style>
 </head>
 <body>
@@ -306,6 +355,8 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--panel
   </div>
   <div id="incContent"></div>
 </div>
+<button class="fab paste" onclick="openPaste()" title="Pegar de WhatsApp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></button>
+<button class="fab" onclick="openForm()" title="Nueva cuenta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 
 <div class="overlay" id="formOverlay"><div class="modal">
@@ -443,6 +494,8 @@ async function startApp(){
   try{
     await loadProfile();await loadAll();
     document.body.classList.toggle('is-admin',isAdmin());
+    // Para vendedores: eliminar del DOM todo lo de admin (ingresos, usuarios, precios, eliminar...)
+    if(!isAdmin()){document.querySelectorAll('.admin-only').forEach(el=>el.remove());const tb=document.querySelector('.tabs');if(tb)tb.style.display='none';}
     $('app').classList.remove('hide');
     $('ucName').textContent=me.name||me.email||'Usuario';
     $('ucRole').textContent=isAdmin()?'Administrador':'Vendedor';
@@ -650,20 +703,22 @@ const MONTHS={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,set:9,oct:10
 function toISO(y,m,d){y=+y;m=+m;d=+d;if(y<100)y+=2000;if(m<1||m>12||d<1||d>31)return null;return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
 function findDate(text){let m=text.match(/(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/);if(m)return toISO(m[1],m[2],m[3]);m=text.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/);if(m)return toISO(m[3],m[2],m[1]);m=text.match(/(\d{1,2})\s*(?:de\s*)?([a-záéíóú]{3,})\.?\s*(?:de\s*)?(\d{4})/i);if(m){const mo=MONTHS[m[2].toLowerCase().slice(0,3)]||MONTHS[m[2].toLowerCase()];if(mo)return toISO(m[3],mo,m[1])}return null}
 const STOP_LBL=/\b(?:correo|e-?mail|clave|contrase|pass|pin|vence|vencimiento|fecha|contacto|tel|cel|whatsapp|wsp|n[uú]mero|precio|costo|pago|monto|valor|plan|cliente|nombre|usuario|titular|servicio|plataforma|cuenta|producto|admin|administrador)\b/i;
-function findAfterLabel(text,labels){for(const l of labels){const m=text.match(new RegExp(l+'\\s*[:=\\-]?\\s*(.+)','i'));if(m){let v=m[1].trim();const sm=v.match(STOP_LBL);if(sm&&sm.index>0)v=v.slice(0,sm.index).trim();v=v.replace(/[.,;]+$/,'').trim();if(v)return v}}return''}
-function findService(text){for(const [re,name] of SERVICE_MATCHERS){if(re.test(text))return name}if(/\bmasuk\d*/i.test(text))return 'CapCut';const lbl=findAfterLabel(text,['servicio','plataforma','cuenta','producto','app','plan']);if(lbl)return lbl.split(/\s{2,}|·|\|/)[0].trim();return''}
+function findAfterLabel(text,labels){for(const l of labels){const m=text.match(new RegExp('\\b'+l+'\\b\\s*[:=\\-]?\\s*(.+)','i'));if(m){let v=m[1].trim();const sm=v.match(STOP_LBL);if(sm&&sm.index>0)v=v.slice(0,sm.index).trim();v=v.replace(/[.,;]+$/,'').trim();if(v)return v}}return''}
+function findService(text){for(const [re,name] of SERVICE_MATCHERS){if(re.test(text))return name}if(/\bmasuk\d*/i.test(text))return 'CapCut';const lbl=findAfterLabel(text,['servicio','plataforma','cuenta','producto','app','plan']);if(lbl&&!lbl.includes('@'))return lbl.split(/\s{2,}|·|\|/)[0].trim();return''}
 function parseMessage(text){
   const emails=text.match(/[\w.+\-]+@[\w\-]+\.[\w.\-]+/g)||[];
-  const email=emails[0]||'';
+  const labeledCorreo=(findAfterLabel(text,['correo','e-?mail']).match(/[\w.+\-]+@[\w\-]+\.[\w.\-]+/)||[])[0];
+  const email=labeledCorreo||emails[0]||'';
   let pass=findAfterLabel(text,['contrase[nñ]a','clave','pass(?:word)?','pin','pw']);if(pass)pass=pass.replace(/[✓✅]/g,'').split(/\s{2,}/)[0].trim();
   const exp=findDate(text.replace(email,''));
   let phone=findAfterLabel(text,['contacto','tel[eé]fono','tel','cel(?:ular)?','whatsapp','wsp','n[uú]mero']);if(!phone){const pm=text.match(/(?:\+?\d[\d\s\-]{7,}\d)/);if(pm&&pm[0]!==email)phone=pm[0]}if(phone)phone=(phone.match(/[+\d][\d\s\-()]{6,}/)||[phone])[0].trim();
   let client=findAfterLabel(text,['cliente','nombre','para','usuario','titular']);if(client){client=client.split(/\s{2,}|·|\|/)[0].replace(/[✓✅]/g,'').trim();if(client.includes('@'))client=''}
   let service=findService(text);
   if(/capcut|masuk/i.test(email+' '+pass)&&!service)service='CapCut';
+  if(!service)service='Gemini'; // convención JPSTORE: si no aparece el nombre de ningún servicio, es Gemini
   let admin_email=findAfterLabel(text,['administrador','correo del admin','correo admin','cuenta madre','admin']);
   if(admin_email){const am=admin_email.match(/[\w.+\-]+@[\w\-]+\.[\w.\-]+/);admin_email=am?am[0]:''}
-  if(!admin_email&&emails.length>1)admin_email=emails[1];
+  if(!admin_email){const other=emails.find(e=>e!==email);if(other)admin_email=other;}
   const is_admin=/\b(es\s+admin|soy\s+admin|cuenta\s+admin|\(admin\)|administrador\b(?!\s*[:=]))/i.test(text)&&!admin_email;
   let priceRaw=findAfterLabel(text,['precio','costo','pago','monto','valor']);let price='';if(priceRaw){const pm=priceRaw.match(/\d+(?:[.,]\d+)?/);if(pm)price=pm[0].replace(',','.')}
   return{service,client,email,pass,exp,phone,price,admin_email,is_admin};
@@ -687,7 +742,7 @@ async function savePaste(){
 
 /* ============ PRODUCTS CONFIG (admin) ============ */
 let draftProducts=[];
-function openProducts(){$('productsOverlay').classList.add('show');set('pRate',cfg.rate);draftProducts=JSON.parse(JSON.stringify(cfg.products));renderProductsList()}
+function openProducts(){if(!isAdmin())return;$('productsOverlay').classList.add('show');set('pRate',cfg.rate);draftProducts=JSON.parse(JSON.stringify(cfg.products));renderProductsList()}
 function closeProducts(){$('productsOverlay').classList.remove('show')}
 function renderProductsList(){$('productsList').innerHTML=draftProducts.map((p,pi)=>`<div class="prod-block"><div class="ph"><input value="${esc(p.name)}" oninput="draftProducts[${pi}].name=this.value" placeholder="Nombre"><button class="rm" onclick="draftProducts.splice(${pi},1);renderProductsList()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div><div class="plan-row head"><span>Plan</span><span>Meses</span><span>Precio USD</span><span>Costo USD</span><span></span></div>${(p.plans||[]).map((pl,li)=>`<div class="plan-row"><input value="${esc(pl.label)}" oninput="draftProducts[${pi}].plans[${li}].label=this.value" placeholder="1 mes"><input type="number" value="${pl.months}" oninput="draftProducts[${pi}].plans[${li}].months=+this.value"><input type="number" step="0.01" value="${pl.priceUSD||0}" oninput="draftProducts[${pi}].plans[${li}].priceUSD=+this.value"><input type="number" step="0.01" value="${pl.costUSD||0}" oninput="draftProducts[${pi}].plans[${li}].costUSD=+this.value"><button class="rm" onclick="draftProducts[${pi}].plans.splice(${li},1);renderProductsList()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>`).join('')}<button class="btn sm ghost" style="margin-top:8px" onclick="draftProducts[${pi}].plans.push({label:'',months:1,priceUSD:0,costUSD:0});renderProductsList()">+ Plan</button></div>`).join('')}
 function addProduct(){draftProducts.push({name:'',plans:[{label:'1 mes',months:1,priceUSD:0,costUSD:0}]});renderProductsList()}
@@ -704,7 +759,7 @@ async function saveProducts(){
 }
 
 /* ============ MANUAL MOVEMENTS (admin) ============ */
-function openManual(type){$('manualOverlay').classList.add('show');$('mType').value=type;$('manualTitle').textContent=type==='ingreso'?'Ingreso manual':'Egreso / gasto';$('manualSub').textContent=type==='ingreso'?'Un cobro no ligado a una cuenta.':'Un gasto (compra de saldo, cuentas, etc.).';set('mConcept','');set('mDate',todayISO());set('mUSD','');set('mBs','')}
+function openManual(type){if(!isAdmin())return;$('manualOverlay').classList.add('show');$('mType').value=type;$('manualTitle').textContent=type==='ingreso'?'Ingreso manual':'Egreso / gasto';$('manualSub').textContent=type==='ingreso'?'Un cobro no ligado a una cuenta.':'Un gasto (compra de saldo, cuentas, etc.).';set('mConcept','');set('mDate',todayISO());set('mUSD','');set('mBs','')}
 function closeManual(){$('manualOverlay').classList.remove('show')}
 function manualBsHint(){const v=parseFloat(get('mUSD'))||0;if(v)set('mBs',Math.round(v*cfg.rate*100)/100)}
 async function saveManual(){
@@ -761,7 +816,7 @@ function closeBatch(){$('batchOverlay').classList.remove('show')}
 async function del(id){if(!confirm('¿Eliminar esta cuenta?'))return;const {error}=await supa.from('accounts').delete().eq('id',id);if(error){toast(error.message,'err');return}db=db.filter(r=>r.id!==id);selected.delete(id);updateBulk();render();toast('Cuenta eliminada')}
 
 /* ============ USERS (admin) ============ */
-async function openUsers(){$('usersOverlay').classList.add('show');set('nuName','');set('nuEmail','');set('nuPass','');$('nuRole').value='vendedor';await renderUsers()}
+async function openUsers(){if(!isAdmin())return;$('usersOverlay').classList.add('show');set('nuName','');set('nuEmail','');set('nuPass','');$('nuRole').value='vendedor';await renderUsers()}
 function closeUsers(){$('usersOverlay').classList.remove('show')}
 async function renderUsers(){const {data,error}=await supa.from('profiles').select('*').order('created_at');if(error){$('usersList').innerHTML='<p class="hint">No se pudieron cargar los usuarios.</p>';return}$('usersList').innerHTML=(data||[]).map(u=>`<div class="user-row"><div class="av">${esc((u.name||u.email||'?').slice(0,1).toUpperCase())}</div><div class="ui"><b>${esc(u.name||'—')}</b><small>${esc(u.email||'')}</small></div><select class="filter" style="padding:7px 30px 7px 12px" onchange="changeRole('${u.id}',this.value)"${u.id===me.id?' disabled':''}><option value="vendedor"${u.role==='vendedor'?' selected':''}>Vendedor</option><option value="admin"${u.role==='admin'?' selected':''}>Admin</option></select></div>`).join('')}
 async function changeRole(id,role){const {error}=await supa.from('profiles').update({role}).eq('id',id);if(error){toast(error.message,'err');return}toast('Rol actualizado')}
@@ -802,7 +857,7 @@ function colName(i){let s='';i++;while(i>0){let m=(i-1)%26;s=String.fromCharCode
 function sheetXml(rows){let body='';rows.forEach((row,ri)=>{let cells='';row.forEach((val,ci)=>{if(val===null||val===undefined||val==='')return;const ref=colName(ci)+(ri+1),s=ri===0?' s="1"':'';if(typeof val==='number'&&isFinite(val))cells+=`<c r="${ref}"${s}><v>${val}</v></c>`;else cells+=`<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${xmlEsc(val)}</t></is></c>`});body+=`<row r="${ri+1}">${cells}</row>`});return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`}
 function buildXlsx(sheets){sheets=sheets.map((s,i)=>({name:(s.name||('Hoja'+(i+1))).replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,31),rows:s.rows}));const files=[];let ov='';sheets.forEach((s,i)=>ov+=`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);files.push({name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${ov}</Types>`});files.push({name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`});let sh='',rel='';sheets.forEach((s,i)=>{sh+=`<sheet name="${xmlEsc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`;rel+=`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`});files.push({name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sh}</sheets></workbook>`});files.push({name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rel}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`});files.push({name:'xl/styles.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>`});sheets.forEach((s,i)=>files.push({name:`xl/worksheets/sheet${i+1}.xml`,data:sheetXml(s.rows)}));return makeZip(files)}
 function round2(n){return Math.round((+n||0)*100)/100}
-function exportPeriodXlsx(){const[from,to,label]=periodRange();const vs=sales.filter(s=>inRange(s.date,from,to)),egs=egresos.filter(e=>inRange(e.date,from,to));const ingBs=vs.reduce((a,s)=>a+saleBs(s),0),egVenta=vs.reduce((a,s)=>a+saleCostBs(s),0),egMan=egs.reduce((a,e)=>a+(Number(e.monto_bs)||0),0);const byProd={};vs.forEach(s=>{(byProd[s.product]=byProd[s.product]||{q:0,bs:0});byProd[s.product].q+=s.qty;byProd[s.product].bs+=saleBs(s)});const resumen=[['JPSTORE — Reporte de ingresos'],[label],[''],['Concepto','Monto Bs'],['Ingresos',round2(ingBs)],['Egresos (costos ventas)',round2(egVenta)],['Egresos (gastos)',round2(egMan)],['Ganancia neta',round2(ingBs-egVenta-egMan)],[''],['Producto','Ventas','Total Bs'],...Object.entries(byProd).sort((a,b)=>b[1].bs-a[1].bs).map(([k,v])=>[k,v.q,round2(v.bs)])];const ventas=[['Fecha','Producto','Cliente/Concepto','Plan','Cantidad','Precio USD','Tasa','Monto Bs'],...vs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(s=>[s.date,s.product,s.client||'',s.plan||'',s.qty,s.manual_bs!=null?'':round2(s.price_usd),Number(s.rate)||cfg.rate,round2(saleBs(s))])];const egresosSheet=[['Fecha','Concepto','Monto USD','Tasa','Monto Bs'],...egs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.concept,e.monto_usd||'',Number(e.rate)||cfg.rate,round2(e.monto_bs)])];const blob=buildXlsx([{name:'Resumen',rows:resumen},{name:'Ventas',rows:ventas},{name:'Egresos',rows:egresosSheet}]);const pn={today:'diario',week:'semanal',month:'mensual',all:'total',custom:'rango'}[period]||'reporte';download(blob,`JPSTORE_ingresos_${pn}_${stamp()}.xlsx`);toast('Excel exportado')}
+function exportPeriodXlsx(){if(!isAdmin())return;const[from,to,label]=periodRange();const vs=sales.filter(s=>inRange(s.date,from,to)),egs=egresos.filter(e=>inRange(e.date,from,to));const ingBs=vs.reduce((a,s)=>a+saleBs(s),0),egVenta=vs.reduce((a,s)=>a+saleCostBs(s),0),egMan=egs.reduce((a,e)=>a+(Number(e.monto_bs)||0),0);const byProd={};vs.forEach(s=>{(byProd[s.product]=byProd[s.product]||{q:0,bs:0});byProd[s.product].q+=s.qty;byProd[s.product].bs+=saleBs(s)});const resumen=[['JPSTORE — Reporte de ingresos'],[label],[''],['Concepto','Monto Bs'],['Ingresos',round2(ingBs)],['Egresos (costos ventas)',round2(egVenta)],['Egresos (gastos)',round2(egMan)],['Ganancia neta',round2(ingBs-egVenta-egMan)],[''],['Producto','Ventas','Total Bs'],...Object.entries(byProd).sort((a,b)=>b[1].bs-a[1].bs).map(([k,v])=>[k,v.q,round2(v.bs)])];const ventas=[['Fecha','Producto','Cliente/Concepto','Plan','Cantidad','Precio USD','Tasa','Monto Bs'],...vs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(s=>[s.date,s.product,s.client||'',s.plan||'',s.qty,s.manual_bs!=null?'':round2(s.price_usd),Number(s.rate)||cfg.rate,round2(saleBs(s))])];const egresosSheet=[['Fecha','Concepto','Monto USD','Tasa','Monto Bs'],...egs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.concept,e.monto_usd||'',Number(e.rate)||cfg.rate,round2(e.monto_bs)])];const blob=buildXlsx([{name:'Resumen',rows:resumen},{name:'Ventas',rows:ventas},{name:'Egresos',rows:egresosSheet}]);const pn={today:'diario',week:'semanal',month:'mensual',all:'total',custom:'rango'}[period]||'reporte';download(blob,`JPSTORE_ingresos_${pn}_${stamp()}.xlsx`);toast('Excel exportado')}
 function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500)}
 function stamp(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 
