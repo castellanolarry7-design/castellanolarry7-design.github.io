@@ -784,7 +784,10 @@ function today(){const d=new Date();d.setHours(0,0,0,0);return d}
 function todayISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function parseISO(s){if(!s)return null;const d=new Date(s+'T00:00:00');return isNaN(d)?null:d}
 function daysUntil(iso){const d=parseISO(iso);if(!d)return null;return Math.round((d-today())/86400000)}
-function addMonthsISO(iso,m){const d=parseISO(iso)||today();const nd=new Date(d);nd.setMonth(nd.getMonth()+Number(m||0));return `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}-${String(nd.getDate()).padStart(2,'0')}`}
+function addMonthsISO(iso,m){const d=parseISO(iso)||today();const nd=new Date(d);const day=nd.getDate();
+  nd.setDate(1);nd.setMonth(nd.getMonth()+Number(m||0));
+  nd.setDate(Math.min(day,new Date(nd.getFullYear(),nd.getMonth()+1,0).getDate())); // 31 ene +1 mes → 28/29 feb, no 3 mar
+  return `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}-${String(nd.getDate()).padStart(2,'0')}`}
 function statusOf(iso){const n=daysUntil(iso);if(n===null)return{key:'active',label:'Sin fecha',cls:'b-act'};if(n<0)return{key:'expired',label:'Vencido',cls:'b-exp'};if(n===0)return{key:'today',label:'Vence hoy',cls:'b-exp'};if(n<=cfg.warnDays)return{key:'soon',label:'Por vencer',cls:'b-soon'};return{key:'active',label:'Activo',cls:'b-act'}}
 function fmtDate(iso){const d=parseISO(iso);if(!d)return'—';return d.toLocaleDateString('es-VE',{day:'2-digit',month:'short',year:'numeric'})}
 function daysText(iso){const n=daysUntil(iso);if(n===null)return'';if(n<0)return`hace ${-n} día${-n>1?'s':''}`;if(n===0)return'hoy';if(n===1)return'mañana';return`en ${n} días`}
@@ -1027,7 +1030,9 @@ const SERVICE_MATCHERS=[
   [/\bnotion\b/i,'Notion'],[/freepik/i,'Freepik'],[/envato/i,'Envato'],[/figma/i,'Figma'],[/\bfilmora\b/i,'Filmora']
 ];
 const MONTHS={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,set:9,oct:10,nov:11,dic:12,january:1,february:2,march:3,april:4,june:6,july:7,august:8,september:9,october:10,november:11,december:12};
-function toISO(y,m,d){y=+y;m=+m;d=+d;if(y<100)y+=2000;if(m<1||m>12||d<1||d>31)return null;return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
+function toISO(y,m,d){y=+y;m=+m;d=+d;if(y<100)y+=2000;if(m<1||m>12||d<1||d>31)return null;
+  const last=new Date(y,m,0).getDate();if(d>last)d=last; // 29/02 en año no bisiesto, 31/04... → último día real del mes
+  return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
 function findDate(text){let m=text.match(/(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/);if(m)return toISO(m[1],m[2],m[3]);m=text.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/);if(m)return toISO(m[3],m[2],m[1]);m=text.match(/(\d{1,2})\s*(?:de\s*)?([a-záéíóú]{3,})\.?\s*(?:de\s*)?(\d{4})/i);if(m){const mo=MONTHS[m[2].toLowerCase().slice(0,3)]||MONTHS[m[2].toLowerCase()];if(mo)return toISO(m[3],mo,m[1])}return null}
 /* Normaliza texto de WhatsApp: guiones unicode (‑ – —), espacios invisibles,
    caracteres de ancho cero y encabezados tipo "[2/7/2026 5:10 a. m.] Fulano:" */
@@ -1586,7 +1591,7 @@ function resetDrop(){$('importBody').innerHTML=`<div class="file-drop" id="drop"
 function wireDrop(){const d=$('drop');if(!d)return;['dragover','dragenter'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add('drag')}));['dragleave','drop'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.remove('drag')}));d.addEventListener('drop',ev=>{if(ev.dataTransfer.files[0])handleFile(ev.dataTransfer.files[0])})}
 function handleFile(file){if(!file)return;const rd=new FileReader();rd.onload=e=>{const text=e.target.result,name=file.name.toLowerCase();if(name.endsWith('.json'))importJSON(text);else if(name.endsWith('.csv'))importCSVfile(text);else parseWhatsAppExport(text)};rd.readAsText(file)}
 function importJSON(text){importDupes=0;importNoPhone=0;try{const data=JSON.parse(text);const arr=Array.isArray(data)?data:(data.records||data.db||[]);importRows=arr.map(r=>({service:r.service||'',client:r.client||'',email:r.email||'',pass:r.pass||r.password||'',exp:r.exp||'',phone:r.phone||'',admin_email:r.admin_email||''}));showReview()}catch(e){toast('JSON inválido','err')}}
-function importCSVfile(text){importDupes=0;importNoPhone=0;const lines=text.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return;const headers=splitCSV(lines[0]).map(h=>h.toLowerCase().trim());const map={servicio:'service',service:'service',producto:'service',cliente:'client',nombre:'client',correo:'email',email:'email','contraseña':'pass',clave:'pass',pass:'pass',vencimiento:'exp',vence:'exp',exp:'exp',fecha:'exp',telefono:'phone','teléfono':'phone',contacto:'phone',phone:'phone',admin:'admin_email',administrador:'admin_email'};importRows=lines.slice(1).map(l=>{const c=splitCSV(l);const o={service:'',client:'',email:'',pass:'',exp:'',phone:'',admin_email:''};headers.forEach((h,i)=>{const f=map[h];if(f)o[f]=(c[i]||'').trim()});if(o.exp)o.exp=findDate(o.exp)||o.exp;return o});showReview()}
+function importCSVfile(text){importDupes=0;importNoPhone=0;const lines=text.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return;const headers=splitCSV(lines[0]).map(h=>h.toLowerCase().trim());const map={servicio:'service',service:'service',producto:'service',cliente:'client',nombre:'client',correo:'email',email:'email','contraseña':'pass',clave:'pass',pass:'pass',vencimiento:'exp',vence:'exp',exp:'exp',fecha:'exp',telefono:'phone','teléfono':'phone',contacto:'phone',phone:'phone',admin:'admin_email',administrador:'admin_email'};importRows=lines.slice(1).map(l=>{const c=splitCSV(l);const o={service:'',client:'',email:'',pass:'',exp:'',phone:'',admin_email:''};headers.forEach((h,i)=>{const f=map[h];if(f)o[f]=(c[i]||'').trim()});if(o.exp)o.exp=findDate(o.exp)||'';return o});showReview()}
 function splitCSV(line){const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(q&&line[i+1]==='"'){cur+='"';i++}else q=!q}else if(ch===','&&!q){out.push(cur);cur=''}else cur+=ch}out.push(cur);return out}
 let importDupes=0,importNoPhone=0;
 function parseWhatsAppExport(text){
