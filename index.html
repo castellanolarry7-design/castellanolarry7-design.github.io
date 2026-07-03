@@ -1417,7 +1417,7 @@ function renderContacts(){
   if(!contacts.length){el.innerHTML='<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><h3>Aún no hay clientes</h3><p>Se agregan solos al registrar ventas con teléfono. Si la tabla no existe, ejecuta contacts_setup.sql en Supabase.</p></div>';return}
   if(!list.length){el.innerHTML='<div class="empty"><h3>Sin resultados</h3><p>Ningún cliente coincide con la búsqueda.</p></div>';return}
   el.innerHTML='<div class="tbl-scroll"><table class="dt"><thead><tr><th>Nombre</th><th>Teléfono</th><th>Correo</th><th>Servicios</th><th>Registrado</th><th></th></tr></thead><tbody>'+
-    list.slice(0,ctLimit).map(c=>`<tr><td>${esc(c.name||'—')}</td><td style="white-space:nowrap">${esc(c.phone)}</td><td>${esc(c.email||'—')}</td><td>${esc(c.services||'—')}</td><td style="white-space:nowrap">${fmtDate((c.created_at||'').slice(0,10))}</td><td style="white-space:nowrap"><button class="rm" title="WhatsApp" onclick="window.open('https://wa.me/${esc(c.phone_norm)}','_blank','noopener')" style="color:var(--green)"><svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 2a10 10 0 0 0-8.6 15l-1.4 5 5.1-1.3A10 10 0 1 0 12 2z"/></svg></button><button class="rm" onclick="delContact('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td></tr>`).join('')+'</tbody></table></div>'
+    list.slice(0,ctLimit).map(c=>`<tr><td>${esc(c.name||'—')}</td><td style="white-space:nowrap">${esc(c.phone)}</td><td>${esc(c.email||'—')}</td><td>${esc(c.services||'—')}</td><td style="white-space:nowrap">${fmtDate((c.created_at||'').slice(0,10))}</td><td style="white-space:nowrap"><button class="rm" title="WhatsApp" onclick="waOpen('${esc(c.phone_norm)}','')" style="color:var(--green)"><svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 2a10 10 0 0 0-8.6 15l-1.4 5 5.1-1.3A10 10 0 1 0 12 2z"/></svg></button><button class="rm" onclick="delContact('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td></tr>`).join('')+'</tbody></table></div>'
     +(list.length>ctLimit?`<div style="text-align:center;margin-top:12px"><button class="btn sm" onclick="ctLimit+=300;renderContacts()">Mostrar 300 más (${list.length-ctLimit} restantes)</button></div>`:'');
 }
 let ctLimit=100;
@@ -1493,7 +1493,18 @@ function applyBatchFilter(){
 function updatePreview(){const el=$('tplPreview');if(!el||el.classList.contains('hide'))return;const r=batchQueue[batchIdx];el.textContent=r?buildMessage(r):'— Cola completada —'}
 async function saveTemplate(){if(!isAdmin())return;const t=$('batchTpl').value.trim();
   try{await supa.from('settings').update({template:t}).eq('id',1);await supa.from('public_config').update({template:t}).eq('id',1);cfg.template=t;toast('Plantilla guardada para todo el equipo')}catch(e){toast(e.message||'Error','err')}}
-function contactOne(id){const r=db.find(x=>x.id===id);if(!r)return;window.open(`https://wa.me/${waNumber(r.phone)}?text=${encodeURIComponent(buildMessage(r))}`,'_blank','noopener');markContacted(id)}
+/* Abre WhatsApp con el mensaje SIN pasar por wa.me (su redirección intermedia
+   corrompe los emojis en algunos navegadores/dispositivos):
+   - móvil  → api.whatsapp.com/send (entrega directa a la app)
+   - PC     → web.whatsapp.com/send (WhatsApp Web, codificación exacta) */
+function waOpen(phone,msg){
+  const n=waNumber(phone);if(!n)return;
+  const enc=encodeURIComponent(msg||'');
+  const mobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const url=(mobile?'https://api.whatsapp.com/send?phone=':'https://web.whatsapp.com/send?phone=')+n+'&text='+enc;
+  window.open(url,'_blank','noopener');
+}
+function contactOne(id){const r=db.find(x=>x.id===id);if(!r)return;waOpen(r.phone,buildMessage(r));markContacted(id)}
 function startBatch(mode){
   let items=[];
   if(mode==='selected')items=db.filter(r=>selected.has(r.id)).filter(r=>r.phone);
@@ -1514,7 +1525,7 @@ function drawQueue(){
   $('nextLabel').textContent=done?'¡Listo!':(batchIdx===0?'Abrir el primero':'Abrir el siguiente');
   updatePreview();
 }
-function sendNext(){if(batchIdx>=batchQueue.length){toast('Lote completado');closeBatch();clearSelection();return}const r=batchQueue[batchIdx];window.open(`https://wa.me/${waNumber(r.phone)}?text=${encodeURIComponent(buildMessage(r))}`,'_blank','noopener');markContacted(r.id);batchIdx++;drawQueue()}
+function sendNext(){if(batchIdx>=batchQueue.length){toast('Lote completado');closeBatch();clearSelection();return}const r=batchQueue[batchIdx];waOpen(r.phone,buildMessage(r));markContacted(r.id);batchIdx++;drawQueue()}
 function skipCurrent(){if(batchIdx<batchQueue.length){batchIdx++;drawQueue()}}
 function closeBatch(){$('batchOverlay').classList.remove('show')}
 
