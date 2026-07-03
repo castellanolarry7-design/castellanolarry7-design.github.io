@@ -375,7 +375,8 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   background:var(--amber-bg);border:1px solid rgba(251,191,36,.35);border-radius:var(--r-md);
   color:var(--amber);font-size:var(--t-sm);font-weight:500}
 .warnbar .btn{color:var(--txt)}
-.plan-row input.missing{border-color:rgba(248,113,113,.6);background:var(--red-bg)}
+.plan-row input.missing,table.dt input.missing{border-color:rgba(248,113,113,.6);background:var(--red-bg)}
+.tpl-preview{background:var(--surf-2);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:12px 14px;font-size:var(--t-sm);line-height:1.55;white-space:pre-wrap;color:var(--txt)}
 
 /* ════════ ESTADÍSTICAS ════════ */
 .charts-grid{display:grid;grid-template-columns:3fr 2fr;gap:var(--s3);margin-top:var(--s4)}
@@ -490,6 +491,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
     <select class="filter" id="fService" onchange="render()"><option value="">Todos los servicios</option></select>
     <select class="filter" id="fStatus" onchange="render()"><option value="">Todos los estados</option><option value="soon">Por vencer</option><option value="expired">Vencidos</option><option value="active">Activos</option><option value="today">Vencen hoy</option><option value="uncontacted">Sin contactar</option><option value="admins">Solo administradores</option></select>
     <select class="filter" id="fSort" onchange="render()"><option value="smart">Orden: prioridad</option><option value="exp">Vencimiento</option><option value="name">Cliente</option><option value="svc">Servicio</option><option value="new">Recientes</option></select>
+    <button class="btn wa" onclick="startBatch('urgent')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg> Renovaciones</button>
     <button class="btn" onclick="openPaste()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg> Pegar de WhatsApp</button>
     <button class="btn primary" onclick="openForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg> Nueva cuenta</button>
   </div>
@@ -630,7 +632,19 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
 
 <div class="overlay" id="batchOverlay"><div class="modal">
   <div class="modal-head"><div><h3>Contacto en lotes</h3><p id="batchSub"></p></div><button class="x" onclick="closeBatch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
-  <div class="modal-body"><div style="display:flex;gap:10px;margin-bottom:16px"><button class="btn primary" style="flex:1;justify-content:center" onclick="sendNext()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> <span id="nextLabel">Abrir el siguiente</span></button><button class="btn" onclick="skipCurrent()">Saltar</button></div><div class="queue" id="queue"></div></div>
+  <div class="modal-body">
+    <div class="mini-label">Mensaje — se personaliza solo para cada cliente</div>
+    <textarea id="batchTpl" oninput="tplChanged()" style="width:100%;min-height:88px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;font-size:13.5px;line-height:1.55;resize:vertical"></textarea>
+    <p class="hint" style="margin-top:6px">Comodines: <b>{nombre}</b> <b>{servicio}</b> <b>{estado}</b> (venció hace X / vence hoy / vence en X días) <b>{vencimiento}</b> <b>{dias}</b> <b>{admin}</b></p>
+    <div class="mini-label" style="margin-top:14px">Así le llegará al cliente actual</div>
+    <div id="tplPreview" class="tpl-preview">—</div>
+    <div style="display:flex;gap:10px;margin:16px 0">
+      <button class="btn primary" style="flex:1;justify-content:center" onclick="sendNext()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> <span id="nextLabel">Abrir el siguiente</span></button>
+      <button class="btn" onclick="skipCurrent()">Saltar</button>
+      <button class="btn admin-only" onclick="saveTemplate()" title="Guardar la plantilla para todo el equipo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
+    </div>
+    <div class="queue" id="queue"></div>
+  </div>
   <div class="modal-foot"><span style="margin-right:auto;color:var(--txt-dim);font-size:13px;align-self:center" id="batchProgress"></span><button class="btn ghost" onclick="closeBatch()">Cerrar</button></div>
 </div></div>
 
@@ -812,6 +826,8 @@ function renderDaily(){
     <div class="sep"></div>
     <div class="di blue"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/></svg></div><div><b>${soon}</b><span>Por vencer</span></div></div>`;
   if(isAdmin()){const t=todayISO();const ingHoy=sales.filter(s=>s.date===t).reduce((a,s)=>a+saleBs(s),0);html+=`<div class="sep"></div><div class="di green"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><b>${fmtBs(ingHoy)}</b><span>Ingresos de hoy</span></div></div>`}
+  const urg=urgentList().length;
+  if(urg)html+=`<button class="btn sm wa" style="margin-left:auto" onclick="startBatch('urgent')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> Escribir renovaciones (${urg})</button>`;
   $('dailyBanner').innerHTML=html;
 }
 function quickFilter(k){const el=$('fStatus');el.value=el.value===k?'':k;render()}
@@ -1293,10 +1309,35 @@ function waNumber(phone){
   if(d.length<=10)return cc+d;                        // corto sin código → local
   return d;                                            // largo sin '+': ya trae código de otro país
 }
-function buildMessage(r){return (cfg.template||'').replace(/{nombre}/g,r.client||'').replace(/{servicio}/g,r.service||'').replace(/{vencimiento}/g,fmtDate(r.exp)).replace(/{dias}/g,daysText(r.exp)||'pronto').replace(/{admin}/g,r.admin_email||'').replace(/\s{2,}/g,' ').trim()}
+const DEFAULT_TPL='Hola {nombre} 👋\nTu suscripción de *{servicio}* {estado}.\n¿Deseas renovarla? Escríbeme y te la reactivo enseguida ✅';
+function estadoText(r){const n=daysUntil(r.exp);if(n===null)return'está por renovar';if(n<0)return`venció hace ${-n} día${-n>1?'s':''} (el ${fmtDate(r.exp)})`;if(n===0)return'vence HOY';if(n===1)return'vence MAÑANA';return`vence en ${n} días (el ${fmtDate(r.exp)})`}
+function buildMessage(r){const tpl=(cfg.template&&cfg.template.trim())?cfg.template:DEFAULT_TPL;
+  return tpl.replace(/{nombre}/g,r.client||'').replace(/{servicio}/g,r.service||'').replace(/{estado}/g,estadoText(r)).replace(/{vencimiento}/g,fmtDate(r.exp)).replace(/{dias}/g,daysText(r.exp)||'pronto').replace(/{admin}/g,r.admin_email||'').replace(/[ \t]{2,}/g,' ').replace(/^ +| +$/gm,'').trim()}
+function urgentList(){return db.filter(r=>{const k=statusOf(r.exp).key;return(k==='expired'||k==='today'||k==='soon')&&!r.contacted&&r.phone}).sort((a,b)=>{const pa=priorityRank(a),pb=priorityRank(b);return pa[0]-pb[0]||pa[1]-pb[1]})}
+function tplChanged(){cfg.template=$('batchTpl').value;updatePreview()}
+function updatePreview(){const el=$('tplPreview');if(!el)return;const r=batchQueue[batchIdx];el.textContent=r?buildMessage(r):'— Cola completada —'}
+async function saveTemplate(){if(!isAdmin())return;const t=$('batchTpl').value.trim();
+  try{await supa.from('settings').update({template:t}).eq('id',1);await supa.from('public_config').update({template:t}).eq('id',1);cfg.template=t;toast('Plantilla guardada para todo el equipo')}catch(e){toast(e.message||'Error','err')}}
 function contactOne(id){const r=db.find(x=>x.id===id);if(!r)return;window.open(`https://wa.me/${waNumber(r.phone)}?text=${encodeURIComponent(buildMessage(r))}`,'_blank','noopener');markContacted(id)}
-function startBatch(mode){let items=[];if(mode==='selected')items=db.filter(r=>selected.has(r.id));items=items.filter(r=>r.phone);if(!items.length){toast('Ninguna tiene teléfono','err');return}batchQueue=items;batchIdx=0;$('batchOverlay').classList.add('show');$('batchSub').textContent='Se abrirá WhatsApp con el mensaje listo para cada cliente.';drawQueue()}
-function drawQueue(){$('queue').innerHTML=batchQueue.map((r,i)=>`<div class="q-item ${i<batchIdx?'done':''} ${i===batchIdx?'current':''}"><div class="qsvc">${esc(initials(r.service))}</div><div class="qinfo"><b>${esc(r.client||'Sin nombre')}</b><small>${esc(r.service)} · ${fmtDate(r.exp)}</small></div>${i<batchIdx?'<svg class="q-check" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>':''}</div>`).join('');const done=batchIdx>=batchQueue.length;$('batchProgress').textContent=`${Math.min(batchIdx,batchQueue.length)} de ${batchQueue.length} enviados`;$('nextLabel').textContent=done?'¡Listo!':(batchIdx===0?'Abrir el primero':'Abrir el siguiente')}
+function startBatch(mode){
+  let items=[];
+  if(mode==='selected')items=db.filter(r=>selected.has(r.id)).filter(r=>r.phone);
+  else if(mode==='urgent')items=urgentList();
+  if(!items.length){toast(mode==='urgent'?'🎉 Nada pendiente: no hay vencidas ni por vencer sin contactar (con teléfono)':'Ninguna seleccionada tiene teléfono','err');return}
+  batchQueue=items;batchIdx=0;
+  $('batchOverlay').classList.add('show');
+  $('batchSub').textContent=mode==='urgent'?`${items.length} cliente(s) por renovar — vencidas primero.`:'Se abrirá WhatsApp con el mensaje listo para cada cliente.';
+  $('batchTpl').value=(cfg.template&&cfg.template.trim())?cfg.template:DEFAULT_TPL;
+  drawQueue();
+}
+function drawQueue(){
+  const stColor={expired:'var(--red)',today:'var(--red)',soon:'var(--amber)',active:'var(--green)'};
+  $('queue').innerHTML=batchQueue.map((r,i)=>{const st=statusOf(r.exp);return`<div class="q-item ${i<batchIdx?'done':''} ${i===batchIdx?'current':''}"><div class="qsvc">${esc(initials(r.service))}</div><div class="qinfo"><b>${esc(r.client||'Sin nombre')}</b><small>${esc(r.service)} · <span style="color:${stColor[st.key]||'var(--txt-dim)'}">${st.label}</span> · ${fmtDate(r.exp)}</small></div>${i<batchIdx?'<svg class="q-check" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>':''}</div>`}).join('');
+  const done=batchIdx>=batchQueue.length;
+  $('batchProgress').textContent=`${Math.min(batchIdx,batchQueue.length)} de ${batchQueue.length} enviados`;
+  $('nextLabel').textContent=done?'¡Listo!':(batchIdx===0?'Abrir el primero':'Abrir el siguiente');
+  updatePreview();
+}
 function sendNext(){if(batchIdx>=batchQueue.length){toast('Lote completado');closeBatch();clearSelection();return}const r=batchQueue[batchIdx];window.open(`https://wa.me/${waNumber(r.phone)}?text=${encodeURIComponent(buildMessage(r))}`,'_blank','noopener');markContacted(r.id);batchIdx++;drawQueue()}
 function skipCurrent(){if(batchIdx<batchQueue.length){batchIdx++;drawQueue()}}
 function closeBatch(){$('batchOverlay').classList.remove('show')}
@@ -1327,12 +1368,41 @@ function closeImport(){$('importOverlay').classList.remove('show');$('importFoot
 function resetDrop(){$('importBody').innerHTML=`<div class="file-drop" id="drop" onclick="document.getElementById('fileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg><b>Arrastra el archivo o haz clic</b><small>Chat de WhatsApp (.txt) · Respaldo (.json) · Tabla (.csv)</small><input type="file" id="fileInput" accept=".txt,.json,.csv" style="display:none" onchange="handleFile(this.files[0])"></div><p class="hint" style="margin-top:14px">En WhatsApp: grupo → ⋮ → Más → Exportar chat → Sin archivos. Se detecta cada mensaje y se extrae correo, clave, fecha, admin y contacto para revisar antes de importar.</p>`;wireDrop();$('importFoot').style.display='none'}
 function wireDrop(){const d=$('drop');if(!d)return;['dragover','dragenter'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add('drag')}));['dragleave','drop'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.remove('drag')}));d.addEventListener('drop',ev=>{if(ev.dataTransfer.files[0])handleFile(ev.dataTransfer.files[0])})}
 function handleFile(file){if(!file)return;const rd=new FileReader();rd.onload=e=>{const text=e.target.result,name=file.name.toLowerCase();if(name.endsWith('.json'))importJSON(text);else if(name.endsWith('.csv'))importCSVfile(text);else parseWhatsAppExport(text)};rd.readAsText(file)}
-function importJSON(text){try{const data=JSON.parse(text);const arr=Array.isArray(data)?data:(data.records||data.db||[]);importRows=arr.map(r=>({service:r.service||'',client:r.client||'',email:r.email||'',pass:r.pass||r.password||'',exp:r.exp||'',phone:r.phone||'',admin_email:r.admin_email||''}));showReview()}catch(e){toast('JSON inválido','err')}}
-function importCSVfile(text){const lines=text.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return;const headers=splitCSV(lines[0]).map(h=>h.toLowerCase().trim());const map={servicio:'service',service:'service',producto:'service',cliente:'client',nombre:'client',correo:'email',email:'email','contraseña':'pass',clave:'pass',pass:'pass',vencimiento:'exp',vence:'exp',exp:'exp',fecha:'exp',telefono:'phone','teléfono':'phone',contacto:'phone',phone:'phone',admin:'admin_email',administrador:'admin_email'};importRows=lines.slice(1).map(l=>{const c=splitCSV(l);const o={service:'',client:'',email:'',pass:'',exp:'',phone:'',admin_email:''};headers.forEach((h,i)=>{const f=map[h];if(f)o[f]=(c[i]||'').trim()});if(o.exp)o.exp=findDate(o.exp)||o.exp;return o});showReview()}
+function importJSON(text){importDupes=0;importNoPhone=0;try{const data=JSON.parse(text);const arr=Array.isArray(data)?data:(data.records||data.db||[]);importRows=arr.map(r=>({service:r.service||'',client:r.client||'',email:r.email||'',pass:r.pass||r.password||'',exp:r.exp||'',phone:r.phone||'',admin_email:r.admin_email||''}));showReview()}catch(e){toast('JSON inválido','err')}}
+function importCSVfile(text){importDupes=0;importNoPhone=0;const lines=text.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return;const headers=splitCSV(lines[0]).map(h=>h.toLowerCase().trim());const map={servicio:'service',service:'service',producto:'service',cliente:'client',nombre:'client',correo:'email',email:'email','contraseña':'pass',clave:'pass',pass:'pass',vencimiento:'exp',vence:'exp',exp:'exp',fecha:'exp',telefono:'phone','teléfono':'phone',contacto:'phone',phone:'phone',admin:'admin_email',administrador:'admin_email'};importRows=lines.slice(1).map(l=>{const c=splitCSV(l);const o={service:'',client:'',email:'',pass:'',exp:'',phone:'',admin_email:''};headers.forEach((h,i)=>{const f=map[h];if(f)o[f]=(c[i]||'').trim()});if(o.exp)o.exp=findDate(o.exp)||o.exp;return o});showReview()}
 function splitCSV(line){const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(q&&line[i+1]==='"'){cur+='"';i++}else q=!q}else if(ch===','&&!q){out.push(cur);cur=''}else cur+=ch}out.push(cur);return out}
-function parseWhatsAppExport(text){const lines=text.split(/\r?\n/);const headRe=/^\s*[\[]?(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})[,\s]+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?\]?\s*[-\s]*([^:]{1,40}?):\s?(.*)$/i;const blocks=[];let cur=null;for(const line of lines){const m=line.match(headRe);if(m){if(cur)blocks.push(cur);cur={sender:m[2].trim(),text:m[3]}}else if(cur)cur.text+='\n'+line}if(cur)blocks.push(cur);const rows=[];for(const b of blocks){if(/<multimedia omitido>|imagen omitida|se eliminó este mensaje|end-to-end|cifrados/i.test(b.text))continue;const hasEmail=/[\w.+\-]+@[\w\-]+\.[\w.\-]+/.test(b.text),hasSvc=findService(b.text);if(!hasEmail&&!hasSvc)continue;const p=parseMessage(b.text);if(!p.client&&b.sender&&!/^\+?\d/.test(b.sender))p.client=b.sender;rows.push(p)}importRows=rows;showReview()}
-function showReview(){if(!importRows.length){toast('No se detectaron cuentas','err');return}$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> posibles cuentas. Corrige y elimina las que no sirvan.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
-function drawReview(){$('revBody').innerHTML=importRows.map((r,i)=>`<tr><td><input value="${esc(r.service)}" onchange="importRows[${i}].service=this.value"></td><td><input value="${esc(r.client)}" onchange="importRows[${i}].client=this.value"></td><td><input value="${esc(r.email)}" onchange="importRows[${i}].email=this.value"></td><td><input value="${esc(r.pass)}" onchange="importRows[${i}].pass=this.value"></td><td><input value="${esc(r.admin_email)}" onchange="importRows[${i}].admin_email=this.value"></td><td><input type="date" value="${esc(r.exp)}" onchange="importRows[${i}].exp=this.value"></td><td><input value="${esc(r.phone)}" onchange="importRows[${i}].phone=this.value"></td><td><button class="rm" onclick="importRows.splice(${i},1);drawReview();document.getElementById('importCount').textContent=importRows.length+' filas'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`).join('')}
+let importDupes=0,importNoPhone=0;
+function parseWhatsAppExport(text){
+  // normalizar espacios raros ANTES de detectar encabezados (iPhone usa U+202F en la hora)
+  text=text.replace(/[\u00A0\u2000-\u200A\u202F\u3000]/g,' ');
+  const lines=text.split(/\r?\n/);
+  const headRe=/^\s*[\[]?(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})[,\s]+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?\]?\s*[-\s]*([^:]{1,40}?):\s?(.*)$/i;
+  const blocks=[];let cur=null;
+  for(const line of lines){const m=line.match(headRe);if(m){if(cur)blocks.push(cur);cur={sender:m[2].trim(),text:m[3]}}else if(cur)cur.text+='\n'+line}
+  if(cur)blocks.push(cur);
+  const rows=[];
+  for(const b of blocks){
+    if(/<multimedia omitido>|imagen omitida|se eliminó este mensaje|end-to-end|cifrados/i.test(b.text))continue;
+    // un mensaje puede traer VARIAS cuentas: separar por correos
+    for(const sub of parseBlocks(b.text)){
+      const hasEmail=/[\w.+\-]+@[\w\-]+\.[\w.\-]+/.test(sub),hasSvc=findService(sub);
+      if(!hasEmail&&!hasSvc)continue;
+      const p=parseMessage(sub);
+      if(!p.client&&b.sender&&!/^\+?\d/.test(b.sender))p.client=b.sender;
+      rows.push(p);
+    }
+  }
+  // deduplicar: contra la base actual y dentro del propio archivo (por correo)
+  const seen=new Set(db.map(r=>(r.email||'').toLowerCase()).filter(Boolean));
+  importDupes=0;const out=[];
+  for(const r of rows){const e=(r.email||'').toLowerCase();
+    if(e&&seen.has(e)){importDupes++;continue}
+    if(e)seen.add(e);out.push(r)}
+  importRows=out;importNoPhone=out.filter(r=>!r.phone).length;
+  showReview();
+}
+function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> cuenta(s) · <b style="color:var(--green)">${importRows.length-importNoPhone} con teléfono</b>${importNoPhone?` · <b style="color:var(--red)">${importNoPhone} sin teléfono</b> (en rojo — complétalos si los tienes)`:''}${importDupes?` · ${importDupes} duplicada(s) omitida(s)`:''}. Corrige lo necesario antes de importar.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
+function drawReview(){$('revBody').innerHTML=importRows.map((r,i)=>`<tr><td><input value="${esc(r.service)}" onchange="importRows[${i}].service=this.value"></td><td><input value="${esc(r.client)}" onchange="importRows[${i}].client=this.value"></td><td><input value="${esc(r.email)}" onchange="importRows[${i}].email=this.value"></td><td><input value="${esc(r.pass)}" onchange="importRows[${i}].pass=this.value"></td><td><input value="${esc(r.admin_email)}" onchange="importRows[${i}].admin_email=this.value"></td><td><input type="date" value="${esc(r.exp)}" onchange="importRows[${i}].exp=this.value"></td><td><input value="${esc(r.phone)}" class="${r.phone?'':'missing'}" onchange="importRows[${i}].phone=this.value;this.classList.toggle('missing',!this.value.trim())"></td><td><button class="rm" onclick="importRows.splice(${i},1);drawReview();document.getElementById('importCount').textContent=importRows.length+' filas'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`).join('')}
 async function confirmImport(){const rows=importRows.filter(r=>r.service||r.email).map(r=>({service:r.service||'—',plan:'',client:r.client||'',email:r.email||'',password:r.pass||'',admin_email:r.admin_email||'',is_admin:false,exp:r.exp||null,phone:r.phone||'',notes:''}));if(!rows.length){toast('Nada para importar','err');return}try{const {data,error}=await supa.from('accounts').insert(rows).select();if(error)throw error;db=[...(data||[]),...db];closeImport();render();rows.filter(r=>r.phone).forEach(r=>saveContact(r.client,r.phone,r.email,r.service));toast(`${rows.length} cuentas importadas`)}catch(e){toast(e.message||'Error al importar','err')}}
 
 /* ============ XLSX ENGINE (admin export) ============ */
