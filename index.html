@@ -420,7 +420,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   .hero p{font-size:var(--t-sm)}
   /* Banner diario: cuadrícula simétrica — la tarjeta crítica (rojas) a lo ancho,
      las dos siguientes en par, ingresos y el botón de renovaciones a lo ancho */
-  .daily{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:var(--s3) 14px;margin-top:14px}
+  .daily{display:grid;grid-template-columns:1fr;gap:10px;padding:var(--s3) 14px;margin-top:14px}
   .daily .sep{display:none}
   .daily .di{min-width:0}
   .daily .di.red,.daily .di.green{grid-column:1/-1}
@@ -428,7 +428,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   .daily .di b{font-size:17px}
   /* Stats: "Cuentas totales" a lo ancho y el resto en 2×2 exacto */
   .stats,.stats.four{grid-template-columns:repeat(2,1fr)}
-  #stats .stat:first-child{grid-column:1/-1;display:flex;align-items:baseline;gap:10px}
+  #stats .stat:first-child{grid-column:1/-1;display:flex;align-items:baseline;justify-content:center;gap:10px;text-align:center}
   #stats .stat:first-child .lbl{margin-top:0}
   .stats{gap:9px;margin-top:var(--s3)}
   .stat{padding:13px}
