@@ -1068,9 +1068,18 @@ async function logPendingSale(acc,plan){
     if(error)throw error;sales.push(data);
   }catch(e){toast('No se pudo crear el ingreso pendiente ('+(e.message||e)+'). ¿Ejecutaste pendientes_setup.sql?','err')}
 }
+function saleAcc(s){return s&&s.account_id?db.find(a=>a.id===s.account_id):null}
+function saleWho(s){
+  const a=saleAcc(s);
+  const nombre=s.client||(a?(a.client||''):'');
+  const tel=a&&a.phone?a.phone:'';
+  const mail=a&&a.email?a.email:'';
+  return {nombre,tel,mail};
+}
 async function fixSale(id){
   const s=sales.find(x=>x.id===id);if(!s)return;
-  const v=prompt(`Monto del ingreso en Bs\n${s.product}${s.client?' — '+s.client:''}${s.plan?' · '+s.plan:''}:`);
+  const w=saleWho(s);
+  const v=prompt(`Monto del ingreso en Bs\n${s.product}${w.nombre?' — '+w.nombre:''}${s.plan?' · '+s.plan:''}${w.tel?'\n📱 '+w.tel:''}${w.mail?'\n✉️ '+w.mail:''}\n🗓 '+fmtDate(s.date)+':`);
   if(v===null)return;
   const bs=parseFloat(String(v).replace(',','.'));
   if(!(bs>0)){toast('Monto inválido','err');return}
@@ -1276,7 +1285,23 @@ async function ensureAdmin(service,adminEmail){
   }catch(e){console.warn('ensureAdmin:',e.message||e)}
 }
 function findRenewalTarget(p,text){
-  if(p.email){const acc=db.find(a=>(a.email||'').toLowerCase()===p.email.toLowerCase()&&(a.service||'').toLowerCase()===(p.service||'').toLowerCase());if(acc)return{acc,why:'correo'}}
+  if(p.email){
+    // candidatas: mismo correo + mismo servicio (una cuenta compartida puede
+    // tener VARIAS personas → la identidad de cada una es su teléfono)
+    const cands=db.filter(a=>(a.email||'').toLowerCase()===p.email.toLowerCase()&&(a.service||'').toLowerCase()===(p.service||'').toLowerCase());
+    if(cands.length){
+      const n=p.phone?waNumber(p.phone):'';
+      if(n){
+        const same=cands.find(a=>a.phone&&waNumber(a.phone)===n);
+        if(same)return{acc:same,why:'correo y teléfono'};           // misma persona → renueva
+        if(REN_RE.test(text||'')&&cands.length===1)return{acc:cands[0],why:'correo (renovación explícita)'};
+        // teléfono distinto sin palabra "renovación" → OTRA persona en la
+        // cuenta compartida → registro NUEVO (no se toca a nadie)
+      }else{
+        return{acc:cands[0],why:'correo'};                          // sin teléfono en el mensaje → renueva la más reciente
+      }
+    }
+  }
   if(REN_RE.test(text||'')&&p.phone){
     const n=waNumber(p.phone);
     if(n){const acc=db.find(a=>a.service===p.service&&a.phone&&waNumber(a.phone)===n);if(acc)return{acc,why:'teléfono'}}
@@ -1448,13 +1473,16 @@ function renderInc(){
   const byDay={};vs.forEach(s=>{(byDay[s.date]=byDay[s.date]||[]).push(s)});const days=Object.keys(byDay).sort().reverse();
   let html='';
   const pend=sales.filter(x=>x.pending);
-  if(pend.length)html+=`<div class="warnbar" style="background:var(--blue-bg);border-color:rgba(96,165,250,.4);color:var(--blue)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="17" height="17" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span><b>💰 ${pend.length} ingreso(s) pendiente(s) de monto</b> — búscalos abajo (botón Asignar) o cambia el periodo a «Todo».</span></div>`;
+  if(pend.length){
+    const det=pend.slice(0,4).map(s=>{const w=saleWho(s);return esc(s.product)+' · '+esc(w.tel||w.mail||w.nombre||fmtDate(s.date))}).join('  ·  ');
+    html+=`<div class="warnbar" style="background:var(--blue-bg);border-color:rgba(96,165,250,.4);color:var(--blue)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="17" height="17" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span><b>💰 ${pend.length} ingreso(s) pendiente(s):</b> ${det}${pend.length>4?` y ${pend.length-4} más`:''} — botón Asignar abajo (periodo «Todo» los muestra todos).</span></div>`;
+  }
   const missing=[];cfg.products.forEach(p=>(p.plans||[]).forEach(pl=>{if(!(Number(pl.priceUSD)>0))missing.push(p.name+' · '+(pl.label||'?'))}));
   if(missing.length)html+=`<div class="warnbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="17" height="17" style="flex-shrink:0"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span><b>${missing.length} plan(es) sin precio de venta:</b> ${missing.slice(0,5).join(', ')}${missing.length>5?` y ${missing.length-5} más`:''}</span><button class="btn sm" style="margin-left:auto" onclick="openProducts()">Configurar precios</button></div>`;
   if(!vs.length&&!egs.length){html=`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg><h3>Sin movimientos en este periodo</h3><p>Al registrar o renovar cuentas los ingresos aparecen aquí.</p></div>`}
   else{
     html+='<div class="tbl-scroll"><table class="dt"><thead><tr><th>Fecha</th><th>Producto</th><th>Cliente/Concepto</th><th>Plan</th><th class="num">Cant.</th><th class="num">Venta USD</th><th class="num">Costo Bs</th><th class="num">Ingreso Bs</th><th></th></tr></thead><tbody>';
-    days.forEach(day=>{const items=byDay[day];const dtot=items.reduce((a,s)=>a+saleBs(s),0);const dcost=items.reduce((a,s)=>a+saleCostBs(s),0);html+=`<tr class="daygroup"><td colspan="6">${fmtDate(day)} — ${items.length} venta(s)</td><td class="num">${dcost?'-'+fmtBs(dcost):'—'}</td><td class="num">${fmtBs(dtot)}</td><td></td></tr>`;items.forEach(s=>{html+=`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.product)}</td><td>${esc(s.client||'—')}</td><td>${esc(s.plan||'—')}</td><td class="num">${s.qty}</td><td class="num">${s.pending?'<span class="badge b-soon" style="font-size:10px;padding:3px 8px">PENDIENTE</span>':(s.manual_bs!=null?'—':fmtUSD(s.price_usd))}</td><td class="num neg">${s.pending?'—':(saleCostBs(s)?'-'+fmtBs(saleCostBs(s)):'—')}</td><td class="num pos">${s.pending?`<button class="btn sm" style="border-color:var(--blue);color:var(--blue)" onclick="fixSale('${s.id}')">💰 Asignar</button>`:fmtBs(saleBs(s))}</td><td><button class="rm" onclick="delSale('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})});
+    days.forEach(day=>{const items=byDay[day];const dtot=items.reduce((a,s)=>a+saleBs(s),0);const dcost=items.reduce((a,s)=>a+saleCostBs(s),0);html+=`<tr class="daygroup"><td colspan="6">${fmtDate(day)} — ${items.length} venta(s)</td><td class="num">${dcost?'-'+fmtBs(dcost):'—'}</td><td class="num">${fmtBs(dtot)}</td><td></td></tr>`;items.forEach(s=>{const w=saleWho(s);html+=`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.product)}</td><td>${esc(w.nombre||'—')}${w.tel?`<div style="color:var(--txt-faint);font-size:11px;white-space:nowrap">📱 ${esc(w.tel)}</div>`:''}${s.pending&&w.mail?`<div style="color:var(--txt-faint);font-size:11px">✉️ ${esc(w.mail)}</div>`:''}</td><td>${esc(s.plan||'—')}</td><td class="num">${s.qty}</td><td class="num">${s.pending?'<span class="badge b-soon" style="font-size:10px;padding:3px 8px">PENDIENTE</span>':(s.manual_bs!=null?'—':fmtUSD(s.price_usd))}</td><td class="num neg">${s.pending?'—':(saleCostBs(s)?'-'+fmtBs(saleCostBs(s)):'—')}</td><td class="num pos">${s.pending?`<button class="btn sm" style="border-color:var(--blue);color:var(--blue)" onclick="fixSale('${s.id}')">💰 Asignar</button>`:fmtBs(saleBs(s))}</td><td><button class="rm" onclick="delSale('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})});
     if(egs.length){html+=`<tr class="daygroup"><td colspan="7">Egresos manuales / gastos</td><td class="num">-${fmtBs(egManualBs)}</td><td></td></tr>`;egs.forEach(e=>{html+=`<tr><td>${fmtDate(e.date)}</td><td>Egreso</td><td>${esc(e.concept)}</td><td>—</td><td class="num">—</td><td class="num">${e.monto_usd?fmtUSD(e.monto_usd):'—'}</td><td class="num neg">-${fmtBs(e.monto_bs)}</td><td class="num">—</td><td><button class="rm" onclick="delEgreso('${e.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})}
     html+='</tbody></table></div>';
     const byProd={};vs.forEach(s=>{(byProd[s.product]=byProd[s.product]||{q:0,bs:0,c:0});byProd[s.product].q+=s.qty;byProd[s.product].bs+=saleBs(s);byProd[s.product].c+=saleCostBs(s)});
@@ -1758,18 +1786,26 @@ function parseWhatsAppExport(text){
   }
   // dentro del archivo: por correo se queda el MÁS RECIENTE (el chat va en orden
   // cronológico) heredando los datos que al último mensaje le falten
-  // llave = correo + servicio: el mismo correo con Canva y ChatGPT son DOS cuentas
+  // llave = correo + servicio, y DENTRO de cada llave se separa por persona
+  // (teléfono): las cuentas compartidas se venden a varias personas distintas
   const byKey=new Map();const noEmail=[];
   for(const r of rows){
     const e=(r.email||'').toLowerCase();
     if(!e){noEmail.push(r);continue}
     const k=e+'|'+(r.service||'').toLowerCase();
-    const prev=byKey.get(k);
-    if(prev){
+    const arr=byKey.get(k)||[];
+    const n=r.phone?waNumber(r.phone):'';
+    let ti=-1;
+    if(n)ti=arr.findIndex(x=>x.phone&&waNumber(x.phone)===n);   // misma persona
+    if(ti<0&&n)ti=arr.findIndex(x=>!x.phone);                    // entrada previa sin tel: se completa
+    if(ti<0&&!n)ti=arr.length-1;                                 // mensaje sin tel: renovación de la última
+    if(ti>=0){
+      const prev=arr[ti];
       r.phone=r.phone||prev.phone;r.client=r.client||prev.client;r.pass=r.pass||prev.pass;r.admin_email=r.admin_email||prev.admin_email;
-      if(!r.exp&&prev.exp)r.exp=prev.exp; // el mensaje más reciente manda; hereda solo si no trae fecha
-    }
-    byKey.set(k,r);
+      if(!r.exp&&prev.exp)r.exp=prev.exp;
+      arr[ti]=r;
+    }else arr.push(r);                                           // otra persona → fila aparte
+    byKey.set(k,arr);
   }
   const byPhone=new Map();
   for(const r of noEmail){
@@ -1780,13 +1816,18 @@ function parseWhatsAppExport(text){
   }
   // sin teléfono no entra: pero solo DESPUÉS de fusionar, así una renovación
   // sin número hereda el teléfono del mensaje anterior del mismo correo
-  const merged=[...byKey.values(),...byPhone.values()].filter(r=>r.phone);
+  const merged=[...[].concat(...byKey.values()),...byPhone.values()].filter(r=>r.phone);
   // contra la base actual: si ya existe el correo, se marca como RENOVACIÓN
   // (actualizará esa cuenta) si trae vencimiento más nuevo; si no, se omite
-  const dbByKey={};db.forEach(a=>{const e=(a.email||'').toLowerCase();if(!e)return;const k=e+'|'+(a.service||'').toLowerCase();if(!dbByKey[k])dbByKey[k]=a});
+  const dbByKey={};db.forEach(a=>{const e=(a.email||'').toLowerCase();if(!e)return;const k=e+'|'+(a.service||'').toLowerCase();(dbByKey[k]=dbByKey[k]||[]).push(a)});
   importDupes=0;const out=[];
   for(const r of merged){
-    const ex=r.email?dbByKey[(r.email||'').toLowerCase()+'|'+(r.service||'').toLowerCase()]:null;
+    let ex=null;
+    if(r.email){
+      const arr=dbByKey[(r.email||'').toLowerCase()+'|'+(r.service||'').toLowerCase()]||[];
+      const n=waNumber(r.phone);
+      ex=arr.find(a=>a.phone&&waNumber(a.phone)===n)||arr.find(a=>!a.phone)||null; // misma persona (o ficha sin tel)
+    }
     if(ex){
       if(r.exp&&(!ex.exp||r.exp>ex.exp)){r._update=ex.id;out.push(r)}
       else importDupes++;
