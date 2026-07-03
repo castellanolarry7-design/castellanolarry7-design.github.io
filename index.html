@@ -550,6 +550,17 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
     <div class="chart-card"><div class="mini-label" id="chProdTitle">Ventas por producto (Bs)</div><div class="chart-wrap"><canvas id="chProd"></canvas></div></div>
   </div>
   <section class="hero" style="padding-top:34px;padding-bottom:0">
+    <h2 style="font-size:20px">Plantilla de renovaciones</h2>
+    <p>El mensaje que se personaliza y envía al escribir renovaciones. Comodines: <b>{nombre}</b> · <b>{servicio}</b> · <b>{estado}</b> · <b>{planes}</b> (precios del servicio del cliente, según Productos y precios) · <b>{vencimiento}</b> · <b>{dias}</b> · <b>{admin}</b></p>
+  </section>
+  <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:10px">
+    <textarea id="batchTpl" oninput="tplChanged()" style="width:100%;min-height:150px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;font-size:13.5px;line-height:1.55;resize:vertical"></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn sm ghost" onclick="resetTemplate()">Restaurar la de fábrica</button>
+      <button class="btn sm primary" onclick="saveTemplate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg> Guardar plantilla</button>
+    </div>
+  </div>
+  <section class="hero" style="padding-top:34px;padding-bottom:0">
     <h2 style="font-size:20px">Directorio de clientes</h2>
     <p>Los teléfonos se guardan aquí automáticamente con cada venta. Es tu base de datos de clientes: persiste aunque elimines cuentas vencidas.</p>
   </section>
@@ -653,17 +664,16 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
 </div></div>
 
 <div class="overlay" id="batchOverlay"><div class="modal">
-  <div class="modal-head"><div><h3>Contacto en lotes</h3><p id="batchSub"></p></div><button class="x" onclick="closeBatch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+  <div class="modal-head"><div><h3>Escribir renovaciones</h3><p id="batchSub"></p></div><button class="x" onclick="closeBatch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
   <div class="modal-body">
-    <div class="mini-label">Mensaje — se personaliza solo para cada cliente</div>
-    <textarea id="batchTpl" oninput="tplChanged()" style="width:100%;min-height:88px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;font-size:13.5px;line-height:1.55;resize:vertical"></textarea>
-    <p class="hint" style="margin-top:6px">Comodines: <b>{nombre}</b> · <b>{servicio}</b> · <b>{estado}</b> (venció hace X / vence hoy / vence en X días) · <b>{planes}</b> (lista de precios del servicio del cliente, según Productos y precios y la tasa del día) · <b>{vencimiento}</b> · <b>{dias}</b> · <b>{admin}</b></p>
-    <div class="mini-label" style="margin-top:14px">Así le llegará al cliente actual</div>
-    <div id="tplPreview" class="tpl-preview">—</div>
-    <div style="display:flex;gap:10px;margin:16px 0">
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <select class="filter" id="batchPlanF" onchange="applyBatchFilter()" style="flex:1;min-width:150px"><option value="">Todos los planes</option></select>
+      <button class="btn sm ghost" onclick="togglePreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> Ver mensaje</button>
+    </div>
+    <div id="tplPreview" class="tpl-preview hide" style="margin-bottom:14px;max-height:220px;overflow-y:auto"></div>
+    <div style="display:flex;gap:10px;margin-bottom:16px">
       <button class="btn primary" style="flex:1;justify-content:center" onclick="sendNext()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> <span id="nextLabel">Abrir el siguiente</span></button>
       <button class="btn" onclick="skipCurrent()">Saltar</button>
-      <button class="btn admin-only" onclick="saveTemplate()" title="Guardar la plantilla para todo el equipo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
     </div>
     <div class="queue" id="queue"></div>
   </div>
@@ -1301,6 +1311,8 @@ function renderInc(){
     html+='<div style="margin-top:22px"><div class="mini-label">Resumen por producto</div><div class="tbl-scroll"><table class="dt"><thead><tr><th>Producto</th><th class="num">Ventas</th><th class="num">Ingresos Bs</th><th class="num">Costos Bs</th><th class="num">Ganancia Bs</th></tr></thead><tbody>'+Object.entries(byProd).sort((a,b)=>b[1].bs-a[1].bs).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v.q}</td><td class="num pos">${fmtBs(v.bs)}</td><td class="num neg">${v.c?'-'+fmtBs(v.c):'—'}</td><td class="num">${fmtBs(v.bs-v.c)}</td></tr>`).join('')+'</tbody></table></div></div>';
   }
   $('incContent').innerHTML=html;
+  const bt=$('batchTpl');
+  if(bt&&document.activeElement!==bt&&!bt.value)bt.value=(cfg.template&&cfg.template.trim())?cfg.template:DEFAULT_TPL;
   renderCharts();renderContacts();
 }
 async function delSale(id){if(!confirm('¿Eliminar este ingreso?'))return;const {error}=await supa.from('sales').delete().eq('id',id);if(error){toast(error.message,'err');return}sales=sales.filter(s=>s.id!==id);renderInc();renderDaily();toast('Ingreso eliminado')}
@@ -1448,8 +1460,37 @@ function estadoText(r){const n=daysUntil(r.exp);if(n===null)return'está por ren
 function buildMessage(r){const tpl=(cfg.template&&cfg.template.trim())?cfg.template:DEFAULT_TPL;
   return tpl.replace(/{nombre}/g,r.client||'').replace(/{servicio}/g,r.service||'').replace(/{estado}/g,estadoText(r)).replace(/{vencimiento}/g,fmtDate(r.exp)).replace(/{dias}/g,daysText(r.exp)||'pronto').replace(/{admin}/g,r.admin_email||'').replace(/{planes}/g,planesText(r.service)||'Pregúntanos por los precios actuales 📲').replace(/[ \t]{2,}/g,' ').replace(/^ +| +$/gm,'').trim()}
 function urgentList(){return db.filter(r=>{const k=statusOf(r.exp).key;return(k==='expired'||k==='today'||k==='soon')&&!r.contacted&&r.phone}).sort((a,b)=>{const pa=priorityRank(a),pb=priorityRank(b);return pa[0]-pb[0]||pa[1]-pb[1]})}
-function tplChanged(){cfg.template=$('batchTpl').value;updatePreview()}
-function updatePreview(){const el=$('tplPreview');if(!el)return;const r=batchQueue[batchIdx];el.textContent=r?buildMessage(r):'— Cola completada —'}
+function tplChanged(){const t=$('batchTpl');if(t)cfg.template=t.value;updatePreview()}
+function resetTemplate(){const t=$('batchTpl');if(t){t.value=DEFAULT_TPL;cfg.template=DEFAULT_TPL;toast('Plantilla de fábrica cargada — dale a Guardar para fijarla')}}
+function togglePreview(){const el=$('tplPreview');el.classList.toggle('hide');updatePreview()}
+/* meses del plan de una cuenta: primero por catálogo, luego por la etiqueta */
+function planMonthsOf(r){
+  const p=findProduct(r.service);
+  if(p&&p.plans){const pl=p.plans.find(x=>x.label===r.plan);if(pl&&Number(pl.months))return Number(pl.months)}
+  const t=normTxt(r.plan||'');if(!t)return null;
+  let m=t.match(/(\d+)\s*mes/);if(m)return +m[1];
+  if(/\ba[nñ]os?\b/.test(t)){m=t.match(/(\d+)\s*a[nñ]os?\b/);return 12*(m?+m[1]:1)} // normTxt convierte "año"→"ano" 
+  m=t.match(/(\d+)\s*dias?/);if(m)return Math.max(1,Math.round(+m[1]/30));
+  return null;
+}
+let batchAll=[];
+function buildBatchFilter(items){
+  const sel=$('batchPlanF');if(!sel)return;
+  const counts={};items.forEach(r=>{const m=planMonthsOf(r);const k=(m==null?'other':m);counts[k]=(counts[k]||0)+1});
+  const lbl=m=>m===12?'1 año':(m===1?'1 mes':m+' meses');
+  const keys=Object.keys(counts).filter(k=>k!=='other').map(Number).sort((a,b)=>a-b);
+  sel.innerHTML=`<option value="">Todos los planes (${items.length})</option>`
+    +keys.map(m=>`<option value="${m}">${lbl(m)} (${counts[m]})</option>`).join('')
+    +(counts.other?`<option value="other">Sin plan definido (${counts.other})</option>`:'');
+  sel.value='';
+}
+function applyBatchFilter(){
+  const v=$('batchPlanF').value;
+  batchQueue=batchAll.filter(r=>{const m=planMonthsOf(r);return !v||(v==='other'?m==null:m===Number(v))});
+  batchIdx=0;drawQueue();
+  $('batchSub').textContent=`${batchQueue.length} cliente(s) en la cola — vencidas primero.`;
+}
+function updatePreview(){const el=$('tplPreview');if(!el||el.classList.contains('hide'))return;const r=batchQueue[batchIdx];el.textContent=r?buildMessage(r):'— Cola completada —'}
 async function saveTemplate(){if(!isAdmin())return;const t=$('batchTpl').value.trim();
   try{await supa.from('settings').update({template:t}).eq('id',1);await supa.from('public_config').update({template:t}).eq('id',1);cfg.template=t;toast('Plantilla guardada para todo el equipo')}catch(e){toast(e.message||'Error','err')}}
 function contactOne(id){const r=db.find(x=>x.id===id);if(!r)return;window.open(`https://wa.me/${waNumber(r.phone)}?text=${encodeURIComponent(buildMessage(r))}`,'_blank','noopener');markContacted(id)}
@@ -1458,10 +1499,11 @@ function startBatch(mode){
   if(mode==='selected')items=db.filter(r=>selected.has(r.id)).filter(r=>r.phone);
   else if(mode==='urgent')items=urgentList();
   if(!items.length){toast(mode==='urgent'?'🎉 Nada pendiente: no hay vencidas ni por vencer sin contactar (con teléfono)':'Ninguna seleccionada tiene teléfono','err');return}
-  batchQueue=items;batchIdx=0;
+  batchAll=items;batchQueue=items;batchIdx=0;
   $('batchOverlay').classList.add('show');
   $('batchSub').textContent=mode==='urgent'?`${items.length} cliente(s) por renovar — vencidas primero.`:'Se abrirá WhatsApp con el mensaje listo para cada cliente.';
-  $('batchTpl').value=(cfg.template&&cfg.template.trim())?cfg.template:DEFAULT_TPL;
+  buildBatchFilter(items);
+  $('tplPreview').classList.add('hide');
   drawQueue();
 }
 function drawQueue(){
