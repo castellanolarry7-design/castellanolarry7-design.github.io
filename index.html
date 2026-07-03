@@ -483,6 +483,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
       <button id="tabIncBtn" class="admin-only" onclick="switchTab('inc')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg><span>Panel Admin</span></button>
     </div>
     <div class="top-actions">
+      <button class="btn ghost icon" id="reloadBtn" onclick="reloadData()" title="Actualizar datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
       <button class="btn ghost sm" onclick="openImport()" title="Importar chat / respaldo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
       <button class="btn ghost icon admin-only" onclick="openUsers()" title="Usuarios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>
       <div class="userchip"><div class="ui"><b id="ucName">—</b><small id="ucRole">—</small></div><div class="av" id="ucAv">?</div></div>
@@ -730,6 +731,26 @@ async function boot(){
   });
 }
 function showLogin(){$('loginScreen').classList.add('show');$('app').classList.add('hide')}
+/* Tiempo real: cualquier cuenta creada/actualizada por el bot u otro usuario
+   aparece al instante, sin recargar (requiere Realtime activo en Supabase) */
+function wireRealtime(){
+  try{
+    supa.channel('rt-accounts')
+      .on('postgres_changes',{event:'*',schema:'public',table:'accounts'},p=>{
+        try{
+          if(p.eventType==='INSERT'&&p.new){if(!db.some(x=>x.id===p.new.id)){db.unshift(p.new);render();toast('📥 Nueva cuenta: '+(p.new.service||'')+(p.new.client?' — '+p.new.client:''))}}
+          else if(p.eventType==='UPDATE'&&p.new){const i=db.findIndex(x=>x.id===p.new.id);if(i>=0)db[i]=p.new;else db.unshift(p.new);render()}
+          else if(p.eventType==='DELETE'&&p.old){db=db.filter(x=>x.id!==p.old.id);render()}
+        }catch(e){}
+      }).subscribe();
+  }catch(e){console.warn('Realtime no disponible:',e.message||e)}
+}
+async function reloadData(){
+  const btn=$('reloadBtn');if(btn)btn.style.opacity='.5';
+  try{await loadAll();render();if(isAdmin())renderInc();toast('Datos actualizados — '+db.length+' cuentas')}
+  catch(e){toast(e.message||'Error al actualizar','err')}
+  if(btn)btn.style.opacity='';
+}
 async function doLogin(){
   const email=get('loginEmail'),pass=$('loginPass').value;
   $('loginErr').textContent='';$('loginBtn').disabled=true;$('loginBtn').textContent='Entrando…';
@@ -749,7 +770,7 @@ async function startApp(){
     $('ucName').textContent=me.name||me.email||'Usuario';
     $('ucRole').textContent=isAdmin()?'Administrador':'Vendedor';
     $('ucAv').textContent=(me.name||me.email||'?').slice(0,1).toUpperCase();
-    render();greet();
+    render();greet();wireRealtime();
   }catch(e){if(e&&e.message==='SESSION_EXPIRED')return;toast('Error cargando datos: '+(e.message||e),'err')}
 }
 async function loadProfile(){
@@ -767,9 +788,10 @@ async function loadProfile(){
 async function fetchAll(table,orderCol){
   const out=[];const CH=1000;let from=0;
   for(;;){
-    let q=supa.from(table).select('*').range(from,from+CH-1);
+    let q=supa.from(table).select('*');
     if(orderCol)q=q.order(orderCol,{ascending:false});
-    const {data,error}=await q;
+    q=q.order('id',{ascending:true}); // desempate estable: filas importadas en lote comparten timestamp
+    const {data,error}=await q.range(from,from+CH-1);
     if(error)throw error;
     out.push(...(data||[]));
     if(!data||data.length<CH)break;
@@ -835,7 +857,14 @@ function render(){
   renderStats();renderDaily();
   const c=$('content');
   if(db.length===0){c.innerHTML=emptyState('Aún no hay cuentas','Agrega tu primera suscripción con “Nueva cuenta”, pega un mensaje de WhatsApp, o importa tu chat antiguo.',true);return}
-  if(list.length===0){c.innerHTML=emptyState('Sin resultados','No hay cuentas que coincidan con los filtros.',false);return}
+  if(list.length===0){
+    let extra='';
+    if(q){
+      const hidden=db.filter(r=>[r.service,r.client,r.email,r.phone,r.notes,r.plan,r.admin_email].join(' ').toLowerCase().includes(q)).length;
+      if(hidden>0)extra=`<p style="margin-top:12px;font-size:14px"><b style="color:var(--amber)">${hidden} coincidencia(s) encontrada(s)</b>, pero los filtros activos las ocultan.</p><div style="margin-top:14px"><button class="btn primary" onclick="clearFilters()">Quitar filtros y mostrarlas</button></div>`;
+    }
+    c.innerHTML=emptyState('Sin resultados','No hay cuentas que coincidan con los filtros.',false).replace('</div>',extra+'</div>');
+    return}
   const slice=list.slice(0,showCount);
   c.innerHTML='<div class="grid">'+slice.map(cardHTML).join('')+'</div>'
     +(list.length>showCount?`<div style="text-align:center;margin:20px 0"><button class="btn" onclick="showMoreCards()">Mostrar más — quedan ${list.length-showCount} de ${list.length}</button></div>`:'');
@@ -898,6 +927,7 @@ function renderDaily(){
   if(urg)html+=`<button class="btn sm wa daily-cta" onclick="startBatch('urgent')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> Escribir renovaciones (${urg})</button>`;
   $('dailyBanner').innerHTML=html;
 }
+function clearFilters(){$('fService').value='';$('fStatus').value='';showCount=60;render()}
 function quickFilter(k){const el=$('fStatus');el.value=el.value===k?'':k;showCount=60;render()}
 function buildServiceFilters(){const svcs=[...new Set([...cfg.products.map(p=>p.name),...db.map(r=>r.service).filter(Boolean)])].sort();const sel=$('fService'),cur=sel.value;sel.innerHTML='<option value="">Todos los servicios</option>'+svcs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');sel.value=cur}
 
@@ -986,11 +1016,11 @@ async function saveForm(){
   try{
     if(id){const {data,error}=await supa.from('accounts').update(rec).eq('id',id).select().single();if(error)throw error;const i=db.findIndex(x=>x.id===id);db[i]=data}
     else{const {data,error}=await supa.from('accounts').insert(rec).select().single();if(error)throw error;db.unshift(data);
-      if(isAdmin()&&$('iLogSale').checked){const price=parseFloat(get('iPrice'))||0;if(price>0){await logSale(data,todayISO(),price,parseFloat(get('iCost'))||0,pl?pl.label:'')}else noSaleWarn=true}
+      if(isAdmin()&&$('iLogSale').checked){const price=parseFloat(get('iPrice'))||0;if(price>0){await logSale(data,todayISO(),price,parseFloat(get('iCost'))||0,pl?pl.label:'')}else{await logPendingSale(data,pl?pl.label:'');noSaleWarn=true}}
     }
     if(phone)saveContact(rec.client,phone,rec.email,service);
     closeForm();render();
-    if(noSaleWarn)toast('Cuenta agregada, pero SIN ingreso: el plan no tiene precio. Configúralo en Productos y precios','err');
+    if(noSaleWarn)toast('Cuenta agregada — 💰 ingreso PENDIENTE de monto (asígnalo en el Panel Admin)','err');
     else toast(id?'Cuenta actualizada':'Cuenta agregada');
   }catch(e){toast(e.message||'Error al guardar','err')}
   $('saveFormBtn').disabled=false;
@@ -1020,6 +1050,30 @@ async function savePay(){
     const i=db.findIndex(x=>x.id===r.id);db[i]=data;
     closePay();render();renderInc();toast('Pago registrado');
   }catch(e){toast(e.message||'Error','err')}
+}
+/* Venta sin precio detectado: queda PENDIENTE con monto 0 hasta que el admin
+   lo asigne — nunca se pierde el control de un ingreso */
+async function logPendingSale(acc,plan){
+  try{
+    const rec={date:todayISO(),account_id:acc?acc.id:null,product:acc?acc.service:'—',client:acc?acc.client:'',plan:plan||'',qty:1,price_usd:0,cost_usd:0,rate:cfg.rate,pending:true};
+    const {data,error}=await supa.from('sales').insert(rec).select().single();
+    if(error)throw error;sales.push(data);
+  }catch(e){toast('No se pudo crear el ingreso pendiente ('+(e.message||e)+'). ¿Ejecutaste pendientes_setup.sql?','err')}
+}
+async function fixSale(id){
+  const s=sales.find(x=>x.id===id);if(!s)return;
+  const v=prompt(`Monto del ingreso en Bs\n${s.product}${s.client?' — '+s.client:''}${s.plan?' · '+s.plan:''}:`);
+  if(v===null)return;
+  const bs=parseFloat(String(v).replace(',','.'));
+  if(!(bs>0)){toast('Monto inválido','err');return}
+  const cv=prompt('Costo en Bs (opcional — deja vacío y acepta para omitir):','');
+  const cbs=parseFloat(String(cv||'').replace(',','.'))||0;
+  const rate=Number(s.rate)||cfg.rate||1;
+  const upd={manual_bs:bs,price_usd:round2(bs/rate),cost_usd:cbs?round2(cbs/rate):0,pending:false};
+  const {data,error}=await supa.from('sales').update(upd).eq('id',id).select().single();
+  if(error){toast(error.message,'err');return}
+  const i=sales.findIndex(x=>x.id===id);if(i>=0)sales[i]=data;
+  renderInc();renderDaily();toast('Ingreso asignado: '+fmtBs(bs));
 }
 async function logSale(acc,date,price,cost,plan){
   const rec={date,account_id:acc?acc.id:null,product:acc?acc.service:'(manual)',client:acc?acc.client:'',plan:plan||'',qty:1,price_usd:+price||0,cost_usd:+cost||0,rate:cfg.rate};
@@ -1221,9 +1275,9 @@ async function savePaste(){
     if(data.phone)saveContact(data.client,data.phone,data.email,service);
     const noPhoneWarn=!data.phone;
     let noSaleWarn=false;
-    if(isAdmin()&&$('pLogSale')&&$('pLogSale').checked){const price=parseFloat(get('pPrice'))||0;if(price>0){await logSale(data,todayISO(),price,parseFloat(get('pCost'))||0,pl?pl.label:'')}else noSaleWarn=true}
+    if(isAdmin()&&$('pLogSale')&&$('pLogSale').checked){const price=parseFloat(get('pPrice'))||0;if(price>0){await logSale(data,todayISO(),price,parseFloat(get('pCost'))||0,pl?pl.label:'')}else{await logPendingSale(data,pl?pl.label:'');noSaleWarn=true}}
     closePaste();render();
-    if(noSaleWarn)toast('Cuenta registrada, pero SIN ingreso: el plan no tiene precio. Configúralo en Productos y precios','err');
+    if(noSaleWarn)toast('Registrada — 💰 ingreso PENDIENTE de monto (asígnalo en el Panel Admin)','err');
     else if(noPhoneWarn)toast('Registrada SIN teléfono — no entró al directorio de clientes','err');
     else if(renInfo)toast(`🔁 Renovación (por ${renInfo.why}): ${renInfo.old?fmtDate(renInfo.old):'—'} → ${fmtDate(exp)}`);
     else toast('Cuenta registrada');
@@ -1261,13 +1315,13 @@ async function savePasteMulti(blocks){
       if(isAdmin()&&$('pLogSale')&&$('pLogSale').checked){
         const pl=it.pl;const price=pl&&Number(pl.priceUSD)>0?Number(pl.priceUSD):0;
         if(price>0)await logSale(r,todayISO(),price,Number(pl.costUSD)||0,pl.label);
-        else noPrice++;
+        else{await logPendingSale(r,pl?pl.label:'');noPrice++}
       }
     }
     closePaste();render();
     let msg=`${added} nueva(s)`+(renewed?` · 🔁 ${renewed} renovación(es)`:'')+` · ${tel} teléfono(s) al directorio`;
     if(noPhone)msg+=` · ${noPhone} sin teléfono`;
-    if(noPrice)msg+=` · ${noPrice} sin ingreso (plan sin precio)`;
+    if(noPrice)msg+=` · 💰 ${noPrice} ingreso(s) pendiente(s) de monto`;
     toast(msg,(noPrice||noPhone)?'err':undefined);
   }catch(e){toast(e.message||'Error al registrar el lote','err')}
 }
@@ -1342,12 +1396,14 @@ function renderInc(){
   $('incStats').innerHTML=`<div class="stat inc"><div class="num sm">${fmtBs(ingBs)}</div><div class="lbl">Ingresos</div><div class="sub">${vs.length} venta(s)</div></div><div class="stat eg"><div class="num sm">${fmtBs(egBs)}</div><div class="lbl">Egresos</div><div class="sub">costos + gastos</div></div><div class="stat gan"><div class="num sm">${fmtBs(gan)}</div><div class="lbl">Ganancia neta</div><div class="sub">${gan>=0?'positiva':'negativa'}</div></div><div class="stat"><div class="num sm">${fmtUSD(vs.reduce((a,s)=>a+saleUSD(s),0))}</div><div class="lbl">Ingresos en USD</div><div class="sub">tasa ×${cfg.rate}</div></div>`;
   const byDay={};vs.forEach(s=>{(byDay[s.date]=byDay[s.date]||[]).push(s)});const days=Object.keys(byDay).sort().reverse();
   let html='';
+  const pend=sales.filter(x=>x.pending);
+  if(pend.length)html+=`<div class="warnbar" style="background:var(--blue-bg);border-color:rgba(96,165,250,.4);color:var(--blue)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="17" height="17" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span><b>💰 ${pend.length} ingreso(s) pendiente(s) de monto</b> — búscalos abajo (botón Asignar) o cambia el periodo a «Todo».</span></div>`;
   const missing=[];cfg.products.forEach(p=>(p.plans||[]).forEach(pl=>{if(!(Number(pl.priceUSD)>0))missing.push(p.name+' · '+(pl.label||'?'))}));
   if(missing.length)html+=`<div class="warnbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="17" height="17" style="flex-shrink:0"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span><b>${missing.length} plan(es) sin precio de venta:</b> ${missing.slice(0,5).join(', ')}${missing.length>5?` y ${missing.length-5} más`:''}</span><button class="btn sm" style="margin-left:auto" onclick="openProducts()">Configurar precios</button></div>`;
   if(!vs.length&&!egs.length){html=`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg><h3>Sin movimientos en este periodo</h3><p>Al registrar o renovar cuentas los ingresos aparecen aquí.</p></div>`}
   else{
     html+='<div class="tbl-scroll"><table class="dt"><thead><tr><th>Fecha</th><th>Producto</th><th>Cliente/Concepto</th><th>Plan</th><th class="num">Cant.</th><th class="num">Venta USD</th><th class="num">Costo Bs</th><th class="num">Ingreso Bs</th><th></th></tr></thead><tbody>';
-    days.forEach(day=>{const items=byDay[day];const dtot=items.reduce((a,s)=>a+saleBs(s),0);const dcost=items.reduce((a,s)=>a+saleCostBs(s),0);html+=`<tr class="daygroup"><td colspan="6">${fmtDate(day)} — ${items.length} venta(s)</td><td class="num">${dcost?'-'+fmtBs(dcost):'—'}</td><td class="num">${fmtBs(dtot)}</td><td></td></tr>`;items.forEach(s=>{html+=`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.product)}</td><td>${esc(s.client||'—')}</td><td>${esc(s.plan||'—')}</td><td class="num">${s.qty}</td><td class="num">${s.manual_bs!=null?'—':fmtUSD(s.price_usd)}</td><td class="num neg">${saleCostBs(s)?'-'+fmtBs(saleCostBs(s)):'—'}</td><td class="num pos">${fmtBs(saleBs(s))}</td><td><button class="rm" onclick="delSale('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})});
+    days.forEach(day=>{const items=byDay[day];const dtot=items.reduce((a,s)=>a+saleBs(s),0);const dcost=items.reduce((a,s)=>a+saleCostBs(s),0);html+=`<tr class="daygroup"><td colspan="6">${fmtDate(day)} — ${items.length} venta(s)</td><td class="num">${dcost?'-'+fmtBs(dcost):'—'}</td><td class="num">${fmtBs(dtot)}</td><td></td></tr>`;items.forEach(s=>{html+=`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.product)}</td><td>${esc(s.client||'—')}</td><td>${esc(s.plan||'—')}</td><td class="num">${s.qty}</td><td class="num">${s.pending?'<span class="badge b-soon" style="font-size:10px;padding:3px 8px">PENDIENTE</span>':(s.manual_bs!=null?'—':fmtUSD(s.price_usd))}</td><td class="num neg">${s.pending?'—':(saleCostBs(s)?'-'+fmtBs(saleCostBs(s)):'—')}</td><td class="num pos">${s.pending?`<button class="btn sm" style="border-color:var(--blue);color:var(--blue)" onclick="fixSale('${s.id}')">💰 Asignar</button>`:fmtBs(saleBs(s))}</td><td><button class="rm" onclick="delSale('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})});
     if(egs.length){html+=`<tr class="daygroup"><td colspan="7">Egresos manuales / gastos</td><td class="num">-${fmtBs(egManualBs)}</td><td></td></tr>`;egs.forEach(e=>{html+=`<tr><td>${fmtDate(e.date)}</td><td>Egreso</td><td>${esc(e.concept)}</td><td>—</td><td class="num">—</td><td class="num">${e.monto_usd?fmtUSD(e.monto_usd):'—'}</td><td class="num neg">-${fmtBs(e.monto_bs)}</td><td class="num">—</td><td><button class="rm" onclick="delEgreso('${e.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})}
     html+='</tbody></table></div>';
     const byProd={};vs.forEach(s=>{(byProd[s.product]=byProd[s.product]||{q:0,bs:0,c:0});byProd[s.product].q+=s.qty;byProd[s.product].bs+=saleBs(s);byProd[s.product].c+=saleCostBs(s)});
