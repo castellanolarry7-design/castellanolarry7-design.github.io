@@ -1049,6 +1049,21 @@ function parseBlocks(raw){
   return blocks.filter(b=>b.trim());
 }
 
+/* ¿Este registro es una RENOVACIÓN de una cuenta existente?
+   - Mismo correo → siempre es la misma cuenta (Gemini renueva así).
+   - Teléfono conocido + palabra "renovación" + mismo servicio → renovación
+     aunque cambie el correo (caso CapCut). Sin la palabra, correo nuevo = cuenta nueva
+     (una persona puede comprar varias cuentas). */
+const REN_RE=/renovaci[oó]n|renovado|renovar|renueva/i;
+function findRenewalTarget(p,text){
+  if(p.email){const acc=db.find(a=>(a.email||'').toLowerCase()===p.email.toLowerCase());if(acc)return{acc,why:'correo'}}
+  if(REN_RE.test(text||'')&&p.phone){
+    const n=waNumber(p.phone);
+    if(n){const acc=db.find(a=>a.service===p.service&&a.phone&&waNumber(a.phone)===n);if(acc)return{acc,why:'teléfono'}}
+  }
+  return null;
+}
+
 /* ============ PASTE ============ */
 function openPaste(){$('pasteOverlay').classList.add('show');['pasteInput','pClient','pEmail','pPass','pExp','pPhone','pPrice','pCost','pAdminEmail'].forEach(i=>{if($(i))$(i).value=''});fillProductSelect('pService',cfg.products[0]&&cfg.products[0].name);fillPlanSelect('p',$('pService').value);onPlanChange('p');if($('pLogSale'))$('pLogSale').checked=true;if($('pPhoneStatus'))$('pPhoneStatus').innerHTML='';$('pasteInput').focus()}
 function closePaste(){$('pasteOverlay').classList.remove('show')}
@@ -1068,14 +1083,30 @@ async function savePaste(){
   if(!exp){toast('Falta la fecha de vencimiento','err');return}
   const pl=selectedPlan(service,$('pPlan').value);
   const rec={service,plan:pl?pl.label:'',client:get('pClient'),email:get('pEmail'),password:get('pPass'),admin_email:get('pAdminEmail'),is_admin:false,exp,phone:get('pPhone'),notes:''};
-  try{const {data,error}=await supa.from('accounts').insert(rec).select().single();if(error)throw error;db.unshift(data);
-    if(rec.phone)saveContact(rec.client,rec.phone,rec.email,service);
-    const noPhoneWarn=!rec.phone;
+  const ren=findRenewalTarget({email:rec.email,phone:rec.phone,service},$('pasteInput').value);
+  let renInfo=null;
+  try{
+    let data;
+    if(ren){
+      const oldExp=ren.acc.exp;
+      const upd={exp,contacted:false,contacted_at:null};
+      if(rec.password)upd.password=rec.password;if(rec.phone)upd.phone=rec.phone;if(rec.client)upd.client=rec.client;
+      if(rec.admin_email)upd.admin_email=rec.admin_email;if(rec.plan)upd.plan=rec.plan;
+      if(rec.email&&rec.email.toLowerCase()!==(ren.acc.email||'').toLowerCase())upd.email=rec.email;
+      const r=await supa.from('accounts').update(upd).eq('id',ren.acc.id).select().single();if(r.error)throw r.error;data=r.data;
+      const ix=db.findIndex(x=>x.id===ren.acc.id);if(ix>=0)db[ix]=data;
+      renInfo={old:oldExp,why:ren.why};
+    }else{
+      const r=await supa.from('accounts').insert(rec).select().single();if(r.error)throw r.error;data=r.data;db.unshift(data);
+    }
+    if(data.phone)saveContact(data.client,data.phone,data.email,service);
+    const noPhoneWarn=!data.phone;
     let noSaleWarn=false;
     if(isAdmin()&&$('pLogSale')&&$('pLogSale').checked){const price=parseFloat(get('pPrice'))||0;if(price>0){await logSale(data,todayISO(),price,parseFloat(get('pCost'))||0,pl?pl.label:'')}else noSaleWarn=true}
     closePaste();render();
     if(noSaleWarn)toast('Cuenta registrada, pero SIN ingreso: el plan no tiene precio. Configúralo en Productos y precios','err');
-    else if(noPhoneWarn)toast('Cuenta registrada SIN teléfono — no entró al directorio de clientes','err');
+    else if(noPhoneWarn)toast('Registrada SIN teléfono — no entró al directorio de clientes','err');
+    else if(renInfo)toast(`🔁 Renovación (por ${renInfo.why}): ${renInfo.old?fmtDate(renInfo.old):'—'} → ${fmtDate(exp)}`);
     else toast('Cuenta registrada');
   }catch(e){toast(e.message||'Error','err')}
 }
@@ -1089,25 +1120,33 @@ async function savePasteMulti(blocks){
     const pi=detectPlanIdx(service,normMsg(raw));
     const prod=findProduct(service);
     const pl=(pi>=0&&prod&&prod.plans)?prod.plans[pi]:((prod&&prod.plans&&prod.plans.length===1)?prod.plans[0]:null);
-    items.push({rec:{service,plan:pl?pl.label:'',client:p.client||'',email:p.email||'',password:p.pass||'',admin_email:p.admin_email||'',is_admin:false,exp:p.exp||null,phone:p.phone||'',notes:''},pl});
+    items.push({rec:{service,plan:pl?pl.label:'',client:p.client||'',email:p.email||'',password:p.pass||'',admin_email:p.admin_email||'',is_admin:false,exp:p.exp||null,phone:p.phone||'',notes:''},pl,raw});
   }
   if(!items.length){toast('No se detectaron cuentas','err');return}
   try{
-    const {data,error}=await supa.from('accounts').insert(items.map(x=>x.rec)).select();
-    if(error)throw error;
-    db=[...(data||[]),...db];
-    let tel=0,noPrice=0,noPhone=0;
-    for(let i=0;i<data.length;i++){
-      const r=data[i],pl=items[i].pl;
+    let tel=0,noPrice=0,noPhone=0,added=0,renewed=0;
+    for(const it of items){
+      const rec=it.rec;let r;
+      const ren=findRenewalTarget({email:rec.email,phone:rec.phone,service:rec.service},it.raw||'');
+      if(ren){
+        const upd={exp:rec.exp,contacted:false,contacted_at:null};
+        if(rec.password)upd.password=rec.password;if(rec.phone)upd.phone=rec.phone;if(rec.client)upd.client=rec.client;
+        if(rec.admin_email)upd.admin_email=rec.admin_email;if(rec.plan)upd.plan=rec.plan;
+        if(rec.email&&rec.email.toLowerCase()!==(ren.acc.email||'').toLowerCase())upd.email=rec.email;
+        const q=await supa.from('accounts').update(upd).eq('id',ren.acc.id).select().single();if(q.error)throw q.error;r=q.data;
+        const ix=db.findIndex(x=>x.id===ren.acc.id);if(ix>=0)db[ix]=r;renewed++;
+      }else{
+        const q=await supa.from('accounts').insert(rec).select().single();if(q.error)throw q.error;r=q.data;db.unshift(r);added++;
+      }
       if(r.phone){saveContact(r.client,r.phone,r.email,r.service);tel++}else noPhone++;
       if(isAdmin()&&$('pLogSale')&&$('pLogSale').checked){
-        const price=pl&&Number(pl.priceUSD)>0?Number(pl.priceUSD):0;
+        const pl=it.pl;const price=pl&&Number(pl.priceUSD)>0?Number(pl.priceUSD):0;
         if(price>0)await logSale(r,todayISO(),price,Number(pl.costUSD)||0,pl.label);
         else noPrice++;
       }
     }
     closePaste();render();
-    let msg=`${data.length} cuentas registradas · ${tel} teléfono(s) al directorio`;
+    let msg=`${added} nueva(s)`+(renewed?` · 🔁 ${renewed} renovación(es)`:'')+` · ${tel} teléfono(s) al directorio`;
     if(noPhone)msg+=` · ${noPhone} sin teléfono`;
     if(noPrice)msg+=` · ${noPrice} sin ingreso (plan sin precio)`;
     toast(msg,(noPrice||noPhone)?'err':undefined);
@@ -1398,30 +1437,71 @@ function parseWhatsAppExport(text){
   const blocks=[];let cur=null;
   for(const line of lines){const m=line.match(headRe);if(m){if(cur)blocks.push(cur);cur={sender:m[2].trim(),text:m[3]}}else if(cur)cur.text+='\n'+line}
   if(cur)blocks.push(cur);
+  const strictSvc=t=>{for(const[re,name]of SERVICE_MATCHERS){if(re.test(t))return name}return /\bmasuk\d*/i.test(t)?'CapCut':''};
   const rows=[];
   for(const b of blocks){
-    if(/<multimedia omitido>|imagen omitida|se eliminó este mensaje|end-to-end|cifrados/i.test(b.text))continue;
+    if(/<multimedia omitido>|imagen omitida|se eliminó este mensaje|end-to-end|cifrados|sticker omitido|audio omitido|video omitido|gif omitido|llamada perdida/i.test(b.text))continue;
     // un mensaje puede traer VARIAS cuentas: separar por correos
     for(const sub of parseBlocks(b.text)){
-      const hasEmail=/[\w.+\-]+@[\w\-]+\.[\w.\-]+/.test(sub),hasSvc=findService(sub);
-      if(!hasEmail&&!hasSvc)continue;
+      const hasEmail=/[\w.+\-]+@[\w\-]+\.[\w.\-]+/.test(sub);
+      const svcHit=strictSvc(sub);
+      if(!hasEmail&&!svcHit)continue;                 // conversación normal → fuera
       const p=parseMessage(sub);
+      if(!p.email&&!p.phone&&!p.exp)continue;          // nada accionable → basura
+      if(!hasEmail&&!(p.exp||p.pass||p.phone))continue; // solo mencionan el servicio → basura
       if(!p.client&&b.sender&&!/^\+?\d/.test(b.sender))p.client=b.sender;
+      p._ren=REN_RE.test(sub);
       rows.push(p);
     }
   }
-  // deduplicar: contra la base actual y dentro del propio archivo (por correo)
-  const seen=new Set(db.map(r=>(r.email||'').toLowerCase()).filter(Boolean));
+  // dentro del archivo: por correo se queda el MÁS RECIENTE (el chat va en orden
+  // cronológico) heredando los datos que al último mensaje le falten
+  const byEmail=new Map();const noEmail=[];
+  for(const r of rows){
+    const e=(r.email||'').toLowerCase();
+    if(!e){noEmail.push(r);continue}
+    const prev=byEmail.get(e);
+    if(prev){
+      r.phone=r.phone||prev.phone;r.client=r.client||prev.client;r.pass=r.pass||prev.pass;r.admin_email=r.admin_email||prev.admin_email;
+      if(prev.exp&&(!r.exp||prev.exp>r.exp))r.exp=prev.exp; // conservar el vencimiento mayor
+    }
+    byEmail.set(e,r);
+  }
+  const merged=[...byEmail.values(),...noEmail];
+  // contra la base actual: si ya existe el correo, se marca como RENOVACIÓN
+  // (actualizará esa cuenta) si trae vencimiento más nuevo; si no, se omite
+  const dbByEmail={};db.forEach(a=>{const e=(a.email||'').toLowerCase();if(e&&!dbByEmail[e])dbByEmail[e]=a});
   importDupes=0;const out=[];
-  for(const r of rows){const e=(r.email||'').toLowerCase();
-    if(e&&seen.has(e)){importDupes++;continue}
-    if(e)seen.add(e);out.push(r)}
+  for(const r of merged){
+    const ex=dbByEmail[(r.email||'').toLowerCase()];
+    if(ex){
+      if(r.exp&&(!ex.exp||r.exp>ex.exp)){r._update=ex.id;out.push(r)}
+      else importDupes++;
+    }else out.push(r);
+  }
   importRows=out;importNoPhone=out.filter(r=>!r.phone).length;
   showReview();
 }
-function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> cuenta(s) · <b style="color:var(--green)">${importRows.length-importNoPhone} con teléfono</b>${importNoPhone?` · <b style="color:var(--red)">${importNoPhone} sin teléfono</b> (en rojo — complétalos si los tienes)`:''}${importDupes?` · ${importDupes} duplicada(s) omitida(s)`:''}. Corrige lo necesario antes de importar.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
-function drawReview(){$('revBody').innerHTML=importRows.map((r,i)=>`<tr><td><input value="${esc(r.service)}" onchange="importRows[${i}].service=this.value"></td><td><input value="${esc(r.client)}" onchange="importRows[${i}].client=this.value"></td><td><input value="${esc(r.email)}" onchange="importRows[${i}].email=this.value"></td><td><input value="${esc(r.pass)}" onchange="importRows[${i}].pass=this.value"></td><td><input value="${esc(r.admin_email)}" onchange="importRows[${i}].admin_email=this.value"></td><td><input type="date" value="${esc(r.exp)}" onchange="importRows[${i}].exp=this.value"></td><td><input value="${esc(r.phone)}" class="${r.phone?'':'missing'}" onchange="importRows[${i}].phone=this.value;this.classList.toggle('missing',!this.value.trim())"></td><td><button class="rm" onclick="importRows.splice(${i},1);drawReview();document.getElementById('importCount').textContent=importRows.length+' filas'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`).join('')}
-async function confirmImport(){const rows=importRows.filter(r=>r.service||r.email).map(r=>({service:r.service||'—',plan:'',client:r.client||'',email:r.email||'',password:r.pass||'',admin_email:r.admin_email||'',is_admin:false,exp:r.exp||null,phone:r.phone||'',notes:''}));if(!rows.length){toast('Nada para importar','err');return}try{const {data,error}=await supa.from('accounts').insert(rows).select();if(error)throw error;db=[...(data||[]),...db];closeImport();render();rows.filter(r=>r.phone).forEach(r=>saveContact(r.client,r.phone,r.email,r.service));toast(`${rows.length} cuentas importadas`)}catch(e){toast(e.message||'Error al importar','err')}}
+function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}const nUpd=importRows.filter(r=>r._update).length;$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> cuenta(s): <b>${importRows.length-nUpd}</b> nueva(s)${nUpd?` · <b style="color:var(--blue)">🔁 ${nUpd} renovación(es)</b> (en azul — actualizarán el vencimiento de cuentas que ya tienes)`:''} · <b style="color:var(--green)">${importRows.length-importNoPhone} con teléfono</b>${importNoPhone?` · <b style="color:var(--red)">${importNoPhone} sin teléfono</b> (en rojo)`:''}${importDupes?` · ${importDupes} ya al día, omitida(s)`:''}.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
+function drawReview(){$('revBody').innerHTML=importRows.map((r,i)=>`<tr${r._update?' style="background:rgba(96,165,250,.06)"':''}><td><input value="${esc(r.service)}" onchange="importRows[${i}].service=this.value"></td><td><input value="${esc(r.client)}" onchange="importRows[${i}].client=this.value"></td><td><input value="${esc(r.email)}" onchange="importRows[${i}].email=this.value"></td><td><input value="${esc(r.pass)}" onchange="importRows[${i}].pass=this.value"></td><td><input value="${esc(r.admin_email)}" onchange="importRows[${i}].admin_email=this.value"></td><td><input type="date" value="${esc(r.exp)}" onchange="importRows[${i}].exp=this.value"></td><td><input value="${esc(r.phone)}" class="${r.phone?'':'missing'}" onchange="importRows[${i}].phone=this.value;this.classList.toggle('missing',!this.value.trim())"></td><td><button class="rm" onclick="importRows.splice(${i},1);drawReview();document.getElementById('importCount').textContent=importRows.length+' filas'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`).join('')}
+async function confirmImport(){
+  const valid=importRows.filter(r=>r.service||r.email);
+  if(!valid.length){toast('Nada para importar','err');return}
+  const news=valid.filter(r=>!r._update).map(r=>({service:r.service||'—',plan:'',client:r.client||'',email:r.email||'',password:r.pass||'',admin_email:r.admin_email||'',is_admin:false,exp:r.exp||null,phone:r.phone||'',notes:''}));
+  const ups=valid.filter(r=>r._update);
+  try{
+    if(news.length){const {data,error}=await supa.from('accounts').insert(news).select();if(error)throw error;db=[...(data||[]),...db]}
+    for(const r of ups){
+      const upd={exp:r.exp||null,contacted:false,contacted_at:null};
+      if(r.pass)upd.password=r.pass;if(r.phone)upd.phone=r.phone;if(r.client)upd.client=r.client;if(r.admin_email)upd.admin_email=r.admin_email;
+      const {data,error}=await supa.from('accounts').update(upd).eq('id',r._update).select().single();if(error)throw error;
+      const ix=db.findIndex(x=>x.id===r._update);if(ix>=0)db[ix]=data;
+    }
+    closeImport();render();
+    valid.filter(r=>r.phone).forEach(r=>saveContact(r.client,r.phone,r.email,r.service));
+    toast(`${news.length} nueva(s) importada(s)`+(ups.length?` · 🔁 ${ups.length} renovada(s)`:''));
+  }catch(e){toast(e.message||'Error al importar','err')}
+}
 
 /* ============ XLSX ENGINE (admin export) ============ */
 const crcTable=(()=>{let c,t=[];for(let n=0;n<256;n++){c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
