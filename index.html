@@ -499,10 +499,11 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
     <div class="stats" id="stats"></div>
   </section>
   <div class="toolbar">
-    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" placeholder="Buscar cliente, correo, servicio, admin o teléfono..." oninput="render()"></div>
+    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" placeholder="Buscar cliente, correo, servicio, admin o teléfono..." oninput="showCount=60;render()"></div>
     <select class="filter" id="fService" onchange="render()"><option value="">Todos los servicios</option></select>
     <select class="filter" id="fStatus" onchange="render()"><option value="">Todos los estados</option><option value="soon">Por vencer</option><option value="expired">Vencidos</option><option value="active">Activos</option><option value="today">Vencen hoy</option><option value="uncontacted">Sin contactar</option><option value="admins">Solo administradores</option></select>
     <select class="filter" id="fSort" onchange="render()"><option value="smart">Orden: prioridad</option><option value="exp">Vencimiento</option><option value="name">Cliente</option><option value="svc">Servicio</option><option value="new">Recientes</option></select>
+    <button class="btn" onclick="openSlots()" title="Cupos libres en cuentas administradoras"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg> Cupos</button>
     <button class="btn wa" onclick="startBatch('urgent')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg> Renovaciones</button>
     <button class="btn" onclick="openPaste()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg> Pegar de WhatsApp</button>
     <button class="btn primary" onclick="openForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg> Nueva cuenta</button>
@@ -553,7 +554,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
     <p>Los teléfonos se guardan aquí automáticamente con cada venta. Es tu base de datos de clientes: persiste aunque elimines cuentas vencidas.</p>
   </section>
   <div class="toolbar">
-    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><input id="ctSearch" placeholder="Buscar nombre, teléfono, correo o servicio..." oninput="renderContacts()"></div>
+    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><input id="ctSearch" placeholder="Buscar nombre, teléfono, correo o servicio..." oninput="ctLimit=100;renderContacts()"></div>
     <span id="ctCount" style="color:var(--txt-dim);font-size:13px;white-space:nowrap"></span>
     <button class="btn sm" onclick="exportContactsCsv()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg> CSV</button>
     <button class="btn sm primary" onclick="exportContactsXlsx()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> Exportar Excel</button>
@@ -622,6 +623,15 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   <div class="modal-foot"><button class="btn ghost" onclick="closeManual()">Cancelar</button><button class="btn primary" onclick="saveManual()">Guardar</button></div>
 </div></div>
 
+<div class="overlay" id="slotsOverlay"><div class="modal wide">
+  <div class="modal-head"><div><h3>Cupos de administradores</h3><p>Ocupación real de tus cuentas madre. Los clientes vencidos liberan cupo: renuévalos o haz limpieza y reutiliza.</p></div><button class="x" onclick="closeSlots()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+  <div class="modal-body">
+    <div class="search" style="margin-bottom:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><input id="slotSearch" placeholder="Buscar administrador por correo, servicio o nombre..." oninput="renderSlots()"></div>
+    <div id="slotsList"></div>
+  </div>
+  <div class="modal-foot"><span class="hint" style="margin-right:auto;align-self:center">Los cupos por producto se definen en «Productos y precios».</span><button class="btn ghost" onclick="closeSlots()">Cerrar</button></div>
+</div></div>
+
 <div class="overlay" id="usersOverlay"><div class="modal">
   <div class="modal-head"><div><h3>Usuarios</h3><p>Crea vendedores y administra roles.</p></div><button class="x" onclick="closeUsers()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
   <div class="modal-body">
@@ -647,7 +657,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   <div class="modal-body">
     <div class="mini-label">Mensaje — se personaliza solo para cada cliente</div>
     <textarea id="batchTpl" oninput="tplChanged()" style="width:100%;min-height:88px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;font-size:13.5px;line-height:1.55;resize:vertical"></textarea>
-    <p class="hint" style="margin-top:6px">Comodines: <b>{nombre}</b> <b>{servicio}</b> <b>{estado}</b> (venció hace X / vence hoy / vence en X días) <b>{vencimiento}</b> <b>{dias}</b> <b>{admin}</b></p>
+    <p class="hint" style="margin-top:6px">Comodines: <b>{nombre}</b> · <b>{servicio}</b> · <b>{estado}</b> (venció hace X / vence hoy / vence en X días) · <b>{planes}</b> (lista de precios del servicio del cliente, según Productos y precios y la tasa del día) · <b>{vencimiento}</b> · <b>{dias}</b> · <b>{admin}</b></p>
     <div class="mini-label" style="margin-top:14px">Así le llegará al cliente actual</div>
     <div id="tplPreview" class="tpl-preview">—</div>
     <div style="display:flex;gap:10px;margin:16px 0">
@@ -800,8 +810,12 @@ function render(){
   const c=$('content');
   if(db.length===0){c.innerHTML=emptyState('Aún no hay cuentas','Agrega tu primera suscripción con “Nueva cuenta”, pega un mensaje de WhatsApp, o importa tu chat antiguo.',true);return}
   if(list.length===0){c.innerHTML=emptyState('Sin resultados','No hay cuentas que coincidan con los filtros.',false);return}
-  c.innerHTML='<div class="grid">'+list.map(cardHTML).join('')+'</div>';
+  const slice=list.slice(0,showCount);
+  c.innerHTML='<div class="grid">'+slice.map(cardHTML).join('')+'</div>'
+    +(list.length>showCount?`<div style="text-align:center;margin:20px 0"><button class="btn" onclick="showMoreCards()">Mostrar más — quedan ${list.length-showCount} de ${list.length}</button></div>`:'');
 }
+let showCount=60;
+function showMoreCards(){showCount+=150;render()}
 function emptyState(t,p,cta){return`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v4M16 4v4"/></svg><h3>${t}</h3><p>${p}</p>${cta?'<div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn primary" onclick="openForm()">Nueva cuenta</button><button class="btn" onclick="openPaste()">Pegar de WhatsApp</button></div>':''}</div>`}
 function cardHTML(r){
   const st=statusOf(r.exp);const rail=st.key==='expired'||st.key==='today'?'var(--red)':st.key==='soon'?'var(--amber)':'var(--green)';const sel=selected.has(r.id);
@@ -816,6 +830,7 @@ function cardHTML(r){
       <div class="row"><span class="k">Vence</span><span class="v"><span class="exp-date">${fmtDate(r.exp)}</span><span class="days-left">· ${daysText(r.exp)}</span></span></div>
       ${r.phone?rowHTML('Contacto',r.phone,true):''}
       ${r.contacted?'<div class="written"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg> Ya contactado</div>':''}
+      ${r.is_admin?adminSlotsLine(r):''}
     </div>
     <div class="card-foot">
       ${r.phone?`<button class="btn sm wa" onclick="contactOne('${r.id}')" title="WhatsApp"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2a10 10 0 0 0-8.6 15l-1.4 5 5.1-1.3A10 10 0 1 0 12 2zm5.6 14c-.2.6-1.2 1.2-1.7 1.2-.4 0-1 .1-3.2-.9-2.7-1.2-4.4-4-4.5-4.2-.1-.2-1-1.4-1-2.6s.6-1.8.9-2c.2-.3.5-.3.6-.3h.5c.2 0 .4 0 .6.5l.8 1.9c.1.2.1.4 0 .5l-.4.5c-.2.2-.3.4-.1.7.2.3.9 1.4 1.9 2.3 1.3 1.1 2 1.3 2.3 1.1.2-.1.4-.4.6-.7.2-.2.4-.2.6-.1l1.7.8c.2.1.4.2.4.3.1.2.1.9-.1 1.5z"/></svg></button>`:''}
@@ -826,6 +841,15 @@ function cardHTML(r){
     </div></div>`;
 }
 function rowHTML(k,v,copy,mask){const disp=mask?'••••••••':esc(v);return`<div class="row"><span class="k">${k}</span><span class="v" ${mask?`data-real="${esc(v)}" onclick="this.textContent=this.dataset.real" style="cursor:pointer" title="Clic para ver"`:''}>${disp}</span>${copy?`<button class="copy" onclick="copyText(this.parentElement.querySelector('.v').dataset.real||this.parentElement.querySelector('.v').textContent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`:''}</div>`}
+function adminSlotsLine(a){
+  const em=(a.email||'').toLowerCase();if(!em)return'';
+  const kids=db.filter(c=>!c.is_admin&&(c.admin_email||'').toLowerCase()===em);
+  const act=kids.filter(c=>statusOf(c.exp).key!=='expired').length;
+  const ven=kids.length-act;
+  const prod=findProduct(a.service);const cap=prod?(Number(prod.slots)||0):0;
+  const libre=cap?Math.max(0,cap-act):null;
+  return`<div class="row"><span class="k">Cupos</span><span class="v" style="display:flex;gap:6px;flex-wrap:wrap">${cap?`<span class="badge ${libre>0?'b-act':'b-exp'}" style="font-size:10px;padding:3px 8px">${libre} libres de ${cap}</span>`:''}<span style="color:var(--txt-dim);font-size:12px">${act} activo${act===1?'':'s'}${ven?` · ${ven} sin renovar`:''}</span></span></div>`;
+}
 function renderStats(){
   const c={total:db.length,active:0,soon:0,expired:0,today:0};
   db.forEach(r=>{const k=statusOf(r.exp).key;if(k==='active')c.active++;else if(k==='soon')c.soon++;else if(k==='expired')c.expired++;else if(k==='today'){c.today++;c.expired++}});
@@ -848,8 +872,50 @@ function renderDaily(){
   if(urg)html+=`<button class="btn sm wa daily-cta" onclick="startBatch('urgent')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> Escribir renovaciones (${urg})</button>`;
   $('dailyBanner').innerHTML=html;
 }
-function quickFilter(k){const el=$('fStatus');el.value=el.value===k?'':k;render()}
+function quickFilter(k){const el=$('fStatus');el.value=el.value===k?'':k;showCount=60;render()}
 function buildServiceFilters(){const svcs=[...new Set([...cfg.products.map(p=>p.name),...db.map(r=>r.service).filter(Boolean)])].sort();const sel=$('fService'),cur=sel.value;sel.innerHTML='<option value="">Todos los servicios</option>'+svcs.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');sel.value=cur}
+
+/* ============ CUPOS DE ADMINISTRADORES ============ */
+let slotsOpen=new Set();
+function slotsData(){
+  return db.filter(a=>a.is_admin).map(a=>{
+    const em=(a.email||'').toLowerCase();
+    const kids=em?db.filter(c=>!c.is_admin&&(c.admin_email||'').toLowerCase()===em):[];
+    const act=kids.filter(c=>{const k=statusOf(c.exp).key;return k!=='expired'}).length; // vence hoy aún ocupa
+    const ven=kids.length-act;
+    const prod=findProduct(a.service);const cap=prod?(Number(prod.slots)||0):0;
+    const libres=cap?Math.max(0,cap-act):null;
+    return{a,kids,act,ven,cap,libres};
+  }).sort((x,y)=>((y.libres==null?-1:y.libres)-(x.libres==null?-1:x.libres))||y.ven-x.ven);
+}
+function openSlots(){slotsOpen=new Set();$('slotsOverlay').classList.add('show');const s=$('slotSearch');if(s)s.value='';renderSlots()}
+function closeSlots(){$('slotsOverlay').classList.remove('show')}
+function toggleSlot(id){slotsOpen.has(id)?slotsOpen.delete(id):slotsOpen.add(id);renderSlots()}
+function slotsBoard(email){closeSlots();$('search').value=email;$('fStatus').value='';showCount=60;render();window.scrollTo({top:0,behavior:'smooth'})}
+function renderSlots(){
+  const q=($('slotSearch')?$('slotSearch').value:'').toLowerCase().trim();
+  let data=slotsData();
+  if(q)data=data.filter(d=>[d.a.email,d.a.service,d.a.client].join(' ').toLowerCase().includes(q));
+  const el=$('slotsList');if(!el)return;
+  if(!data.length){el.innerHTML='<div class="empty" style="padding:40px 20px"><h3>Sin cuentas administradoras</h3><p>Marca «Esta cuenta ES la administradora» al registrarla, y enlaza a los clientes con su correo en «Correo del administrador».</p></div>';return}
+  el.innerHTML=data.map(d=>{
+    const open=slotsOpen.has(d.a.id);
+    const kidsHtml=open?`<div style="flex-basis:100%;margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft);display:flex;flex-direction:column;gap:6px">
+      ${d.kids.length?d.kids.map(c=>{const st=statusOf(c.exp);return`<div style="display:flex;gap:8px;align-items:center;font-size:12.5px"><span class="badge ${st.cls}" style="font-size:10px;padding:3px 8px"><span class="bdot"></span>${st.label}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.client||c.email||'—')}${c.email&&c.client?' · '+esc(c.email):''}</span><span style="color:var(--txt-faint)">${fmtDate(c.exp)}</span></div>`}).join(''):'<span class="hint">Sin clientes enlazados a este correo.</span>'}
+      <button class="btn sm" style="align-self:flex-start;margin-top:4px" onclick="event.stopPropagation();slotsBoard('${esc(d.a.email||'')}')">Ver en el tablero</button>
+    </div>`:'';
+    return`<div class="user-row" style="cursor:pointer;flex-wrap:wrap" onclick="toggleSlot('${d.a.id}')">
+      <div class="av">${esc(initials(d.a.service))}</div>
+      <div class="ui"><b>${esc(d.a.email||d.a.client||'—')}</b><small>${esc(d.a.service)}${d.a.client?' · '+esc(d.a.client):''}</small></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${d.cap?`<span class="badge ${d.libres>0?'b-act':'b-exp'}" style="font-weight:700">${d.libres} de ${d.cap} libres</span>`:'<span class="badge" style="background:var(--panel-2);color:var(--txt-faint)">sin cupos def.</span>'}
+        <span class="badge b-act">${d.act} activo${d.act===1?'':'s'}</span>
+        ${d.ven?`<span class="badge b-exp">${d.ven} sin renovar</span>`:''}
+      </div>
+      ${kidsHtml}
+    </div>`;
+  }).join('');
+}
 
 /* ============ SELECTION ============ */
 function toggleSel(id){selected.has(id)?selected.delete(id):selected.add(id);updateBulk();render()}
@@ -1160,13 +1226,13 @@ function closeProducts(){$('productsOverlay').classList.remove('show')}
 function planRate(){return parseFloat(get('pRate'))||Number(cfg.rate)||1}
 function syncFromUSD(el,pi,li,f){const v=parseFloat(el.value)||0;draftProducts[pi].plans[li][f]=v;const t=el.closest('.plan-row').querySelector(`[data-bs="${f}"]`);if(t)t.value=v?round2(v*planRate()):''}
 function syncFromBs(el,pi,li,f){const bs=parseFloat(el.value)||0;const usd=bs?round2(bs/planRate()):0;draftProducts[pi].plans[li][f]=usd;const t=el.closest('.plan-row').querySelector(`[data-usd="${f}"]`);if(t)t.value=usd||''}
-function renderProductsList(){$('productsList').innerHTML=draftProducts.map((p,pi)=>`<div class="prod-block"><div class="ph"><input value="${esc(p.name)}" oninput="draftProducts[${pi}].name=this.value" placeholder="Nombre"><button class="rm" onclick="draftProducts.splice(${pi},1);renderProductsList()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div><div class="plan-scroll"><div class="plan-row head"><span>Plan</span><span>Meses</span><span>Venta $</span><span>Venta Bs</span><span>Costo $</span><span>Costo Bs</span><span></span></div>${(p.plans||[]).map((pl,li)=>`<div class="plan-row"><input value="${esc(pl.label)}" oninput="draftProducts[${pi}].plans[${li}].label=this.value" placeholder="1 mes"><input type="number" value="${pl.months}" oninput="draftProducts[${pi}].plans[${li}].months=+this.value"><input type="number" step="0.01" value="${pl.priceUSD||0}" data-usd="priceUSD" class="${Number(pl.priceUSD)>0?'':'missing'}" oninput="this.classList.toggle('missing',!(parseFloat(this.value)>0));syncFromUSD(this,${pi},${li},'priceUSD')"><input type="number" step="0.01" value="${pl.priceUSD?round2(pl.priceUSD*planRate()):''}" data-bs="priceUSD" oninput="syncFromBs(this,${pi},${li},'priceUSD')" placeholder="Bs"><input type="number" step="0.01" value="${pl.costUSD||0}" data-usd="costUSD" oninput="syncFromUSD(this,${pi},${li},'costUSD')"><input type="number" step="0.01" value="${pl.costUSD?round2(pl.costUSD*planRate()):''}" data-bs="costUSD" oninput="syncFromBs(this,${pi},${li},'costUSD')" placeholder="Bs"><button class="rm" onclick="draftProducts[${pi}].plans.splice(${li},1);renderProductsList()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>`).join('')}</div><button class="btn sm ghost" style="margin-top:8px" onclick="draftProducts[${pi}].plans.push({label:'',months:1,priceUSD:0,costUSD:0});renderProductsList()">+ Plan</button></div>`).join('')}
+function renderProductsList(){$('productsList').innerHTML=draftProducts.map((p,pi)=>`<div class="prod-block"><div class="ph"><input value="${esc(p.name)}" oninput="draftProducts[${pi}].name=this.value" placeholder="Nombre"><input type="number" min="0" value="${p.slots||''}" placeholder="Cupos" title="Cupos por cuenta administradora (cuántos clientes caben en una cuenta madre)" style="width:84px;flex:none" oninput="draftProducts[${pi}].slots=+this.value||0"><button class="rm" onclick="draftProducts.splice(${pi},1);renderProductsList()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div><div class="plan-scroll"><div class="plan-row head"><span>Plan</span><span>Meses</span><span>Venta $</span><span>Venta Bs</span><span>Costo $</span><span>Costo Bs</span><span></span></div>${(p.plans||[]).map((pl,li)=>`<div class="plan-row"><input value="${esc(pl.label)}" oninput="draftProducts[${pi}].plans[${li}].label=this.value" placeholder="1 mes"><input type="number" value="${pl.months}" oninput="draftProducts[${pi}].plans[${li}].months=+this.value"><input type="number" step="0.01" value="${pl.priceUSD||0}" data-usd="priceUSD" class="${Number(pl.priceUSD)>0?'':'missing'}" oninput="this.classList.toggle('missing',!(parseFloat(this.value)>0));syncFromUSD(this,${pi},${li},'priceUSD')"><input type="number" step="0.01" value="${pl.priceUSD?round2(pl.priceUSD*planRate()):''}" data-bs="priceUSD" oninput="syncFromBs(this,${pi},${li},'priceUSD')" placeholder="Bs"><input type="number" step="0.01" value="${pl.costUSD||0}" data-usd="costUSD" oninput="syncFromUSD(this,${pi},${li},'costUSD')"><input type="number" step="0.01" value="${pl.costUSD?round2(pl.costUSD*planRate()):''}" data-bs="costUSD" oninput="syncFromBs(this,${pi},${li},'costUSD')" placeholder="Bs"><button class="rm" onclick="draftProducts[${pi}].plans.splice(${li},1);renderProductsList()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>`).join('')}</div><button class="btn sm ghost" style="margin-top:8px" onclick="draftProducts[${pi}].plans.push({label:'',months:1,priceUSD:0,costUSD:0});renderProductsList()">+ Plan</button></div>`).join('')}
 function addProduct(){draftProducts.push({name:'',plans:[{label:'1 mes',months:1,priceUSD:0,costUSD:0}]});renderProductsList()}
 async function saveProducts(){
-  const products=draftProducts.filter(p=>p.name.trim()).map(p=>({name:p.name.trim(),plans:(p.plans||[]).filter(pl=>pl.label||pl.months||pl.priceUSD).map(pl=>({label:(pl.label||'').trim()||(pl.months+' mes'),months:+pl.months||1,priceUSD:+pl.priceUSD||0,costUSD:+pl.costUSD||0}))}));
+  const products=draftProducts.filter(p=>p.name.trim()).map(p=>({name:p.name.trim(),slots:+p.slots||0,plans:(p.plans||[]).filter(pl=>pl.label||pl.months||pl.priceUSD).map(pl=>({label:(pl.label||'').trim()||(pl.months+' mes'),months:+pl.months||1,priceUSD:+pl.priceUSD||0,costUSD:+pl.costUSD||0}))}));
   products.forEach(p=>{if(!p.plans.length)p.plans=[{label:'1 mes',months:1,priceUSD:0,costUSD:0}]});
   const rate=parseFloat(get('pRate'))||cfg.rate;
-  const catalog=products.map(p=>({name:p.name,plans:p.plans.map(pl=>({label:pl.label,months:pl.months}))}));
+  const catalog=products.map(p=>({name:p.name,slots:p.slots||0,plans:p.plans.map(pl=>({label:pl.label,months:pl.months,priceBs:Math.round((pl.priceUSD||0)*rate)}))}));
   try{
     await supa.from('settings').update({rate,products}).eq('id',1);
     await supa.from('public_config').update({catalog}).eq('id',1);
@@ -1339,8 +1405,10 @@ function renderContacts(){
   if(!contacts.length){el.innerHTML='<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><h3>Aún no hay clientes</h3><p>Se agregan solos al registrar ventas con teléfono. Si la tabla no existe, ejecuta contacts_setup.sql en Supabase.</p></div>';return}
   if(!list.length){el.innerHTML='<div class="empty"><h3>Sin resultados</h3><p>Ningún cliente coincide con la búsqueda.</p></div>';return}
   el.innerHTML='<div class="tbl-scroll"><table class="dt"><thead><tr><th>Nombre</th><th>Teléfono</th><th>Correo</th><th>Servicios</th><th>Registrado</th><th></th></tr></thead><tbody>'+
-    list.map(c=>`<tr><td>${esc(c.name||'—')}</td><td style="white-space:nowrap">${esc(c.phone)}</td><td>${esc(c.email||'—')}</td><td>${esc(c.services||'—')}</td><td style="white-space:nowrap">${fmtDate((c.created_at||'').slice(0,10))}</td><td style="white-space:nowrap"><button class="rm" title="WhatsApp" onclick="window.open('https://wa.me/${esc(c.phone_norm)}','_blank','noopener')" style="color:var(--green)"><svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 2a10 10 0 0 0-8.6 15l-1.4 5 5.1-1.3A10 10 0 1 0 12 2z"/></svg></button><button class="rm" onclick="delContact('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td></tr>`).join('')+'</tbody></table></div>';
+    list.slice(0,ctLimit).map(c=>`<tr><td>${esc(c.name||'—')}</td><td style="white-space:nowrap">${esc(c.phone)}</td><td>${esc(c.email||'—')}</td><td>${esc(c.services||'—')}</td><td style="white-space:nowrap">${fmtDate((c.created_at||'').slice(0,10))}</td><td style="white-space:nowrap"><button class="rm" title="WhatsApp" onclick="window.open('https://wa.me/${esc(c.phone_norm)}','_blank','noopener')" style="color:var(--green)"><svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 2a10 10 0 0 0-8.6 15l-1.4 5 5.1-1.3A10 10 0 1 0 12 2z"/></svg></button><button class="rm" onclick="delContact('${c.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td></tr>`).join('')+'</tbody></table></div>'
+    +(list.length>ctLimit?`<div style="text-align:center;margin-top:12px"><button class="btn sm" onclick="ctLimit+=300;renderContacts()">Mostrar 300 más (${list.length-ctLimit} restantes)</button></div>`:'');
 }
+let ctLimit=100;
 async function delContact(id){
   if(!confirm('¿Eliminar este cliente del directorio?'))return;
   const {error}=await supa.from('contacts').delete().eq('id',id);
@@ -1366,10 +1434,19 @@ function waNumber(phone){
   if(d.length<=10)return cc+d;                        // corto sin código → local
   return d;                                            // largo sin '+': ya trae código de otro país
 }
-const DEFAULT_TPL='Hola {nombre} 👋\nTu suscripción de *{servicio}* {estado}.\n¿Deseas renovarla? Escríbeme y te la reactivo enseguida ✅';
+const DEFAULT_TPL='Buenas, estimado cliente 👋\nLe informamos que su cuenta de *{servicio}* {estado} ⏳🗓️\nPor favor, indíquenos si desea renovar para mantener su servicio activo ✅; de lo contrario, la cuenta será desactivada por protocolo 🔒.\n\n📌 *Planes {servicio}:*\n{planes}\n\n🚀 También contamos con otros servicios:\n🔹 CapCut Pro: edición de video premium\n🔹 Canva Pro: diseños rápidos y profesionales\n🔹 Adobe Creative Cloud: suite avanzada de diseño y edición\n🔹 Flow Infinito: generación ilimitada con IA\n🔹 Súper Grok: asistencia inteligente y creativa\n🔹 HeyGen Creator: videos con avatar IA\n🔹 Perplexity Pro: búsqueda inteligente y respuestas precisas\n🔹 ElevenLabs: voces IA realistas y narraciones\n🤖 Bots automatizados para Instagram y WhatsApp y mucho más\n\nTambién te invitamos a ingresar a nuestro grupo de promos diarias 🤝🫡\n*JPSTORE, tu aliado digital* ✅';
+/* {planes}: lista de precios del servicio del cliente, desde Productos y precios
+   con la tasa vigente — se actualiza sola al cambiar precios o tasa */
+function planesText(service){
+  const p=findProduct(service);if(!p||!p.plans||!p.plans.length)return'';
+  return p.plans.map(pl=>{
+    const bs=pl.priceBs!=null&&Number(pl.priceBs)>0?Number(pl.priceBs):(Number(pl.priceUSD)>0?Math.round(Number(pl.priceUSD)*(Number(cfg.rate)||0)):0);
+    return bs>0?`${pl.label}: ${bs.toLocaleString('es-VE')} Bs`:null;
+  }).filter(Boolean).join('\n');
+}
 function estadoText(r){const n=daysUntil(r.exp);if(n===null)return'está por renovar';if(n<0)return`venció hace ${-n} día${-n>1?'s':''} (el ${fmtDate(r.exp)})`;if(n===0)return'vence HOY';if(n===1)return'vence MAÑANA';return`vence en ${n} días (el ${fmtDate(r.exp)})`}
 function buildMessage(r){const tpl=(cfg.template&&cfg.template.trim())?cfg.template:DEFAULT_TPL;
-  return tpl.replace(/{nombre}/g,r.client||'').replace(/{servicio}/g,r.service||'').replace(/{estado}/g,estadoText(r)).replace(/{vencimiento}/g,fmtDate(r.exp)).replace(/{dias}/g,daysText(r.exp)||'pronto').replace(/{admin}/g,r.admin_email||'').replace(/[ \t]{2,}/g,' ').replace(/^ +| +$/gm,'').trim()}
+  return tpl.replace(/{nombre}/g,r.client||'').replace(/{servicio}/g,r.service||'').replace(/{estado}/g,estadoText(r)).replace(/{vencimiento}/g,fmtDate(r.exp)).replace(/{dias}/g,daysText(r.exp)||'pronto').replace(/{admin}/g,r.admin_email||'').replace(/{planes}/g,planesText(r.service)||'Pregúntanos por los precios actuales 📲').replace(/[ \t]{2,}/g,' ').replace(/^ +| +$/gm,'').trim()}
 function urgentList(){return db.filter(r=>{const k=statusOf(r.exp).key;return(k==='expired'||k==='today'||k==='soon')&&!r.contacted&&r.phone}).sort((a,b)=>{const pa=priorityRank(a),pb=priorityRank(b);return pa[0]-pb[0]||pa[1]-pb[1]})}
 function tplChanged(){cfg.template=$('batchTpl').value;updatePreview()}
 function updatePreview(){const el=$('tplPreview');if(!el)return;const r=batchQueue[batchIdx];el.textContent=r?buildMessage(r):'— Cola completada —'}
@@ -1447,9 +1524,9 @@ function parseWhatsAppExport(text){
       const svcHit=strictSvc(sub);
       if(!hasEmail&&!svcHit)continue;                 // conversación normal → fuera
       const p=parseMessage(sub);
-      if(!p.email&&!p.phone&&!p.exp)continue;          // nada accionable → basura
-      if(!hasEmail&&!(p.exp||p.pass||p.phone))continue; // solo mencionan el servicio → basura
-      if(!p.client&&b.sender&&!/^\+?\d/.test(b.sender))p.client=b.sender;
+      if(!p.phone&&!p.email)continue;                    // sin teléfono NI correo: inservible
+      if(!p.email&&!p.exp&&!p.pass)continue;             // teléfono suelto sin datos → basura
+      // el remitente del mensaje es el encargado, NO el cliente: no se usa
       p._ren=REN_RE.test(sub);
       rows.push(p);
     }
@@ -1467,7 +1544,16 @@ function parseWhatsAppExport(text){
     }
     byEmail.set(e,r);
   }
-  const merged=[...byEmail.values(),...noEmail];
+  const byPhone=new Map();
+  for(const r of noEmail){
+    const k=r.service+'|'+waNumber(r.phone);
+    const prev=byPhone.get(k);
+    if(prev){r.client=r.client||prev.client;r.pass=r.pass||prev.pass;if(prev.exp&&(!r.exp||prev.exp>r.exp))r.exp=prev.exp}
+    byPhone.set(k,r);
+  }
+  // sin teléfono no entra: pero solo DESPUÉS de fusionar, así una renovación
+  // sin número hereda el teléfono del mensaje anterior del mismo correo
+  const merged=[...byEmail.values(),...byPhone.values()].filter(r=>r.phone);
   // contra la base actual: si ya existe el correo, se marca como RENOVACIÓN
   // (actualizará esa cuenta) si trae vencimiento más nuevo; si no, se omite
   const dbByEmail={};db.forEach(a=>{const e=(a.email||'').toLowerCase();if(e&&!dbByEmail[e])dbByEmail[e]=a});
@@ -1482,25 +1568,43 @@ function parseWhatsAppExport(text){
   importRows=out;importNoPhone=out.filter(r=>!r.phone).length;
   showReview();
 }
-function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}const nUpd=importRows.filter(r=>r._update).length;$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> cuenta(s): <b>${importRows.length-nUpd}</b> nueva(s)${nUpd?` · <b style="color:var(--blue)">🔁 ${nUpd} renovación(es)</b> (en azul — actualizarán el vencimiento de cuentas que ya tienes)`:''} · <b style="color:var(--green)">${importRows.length-importNoPhone} con teléfono</b>${importNoPhone?` · <b style="color:var(--red)">${importNoPhone} sin teléfono</b> (en rojo)`:''}${importDupes?` · ${importDupes} ya al día, omitida(s)`:''}.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
-function drawReview(){$('revBody').innerHTML=importRows.map((r,i)=>`<tr${r._update?' style="background:rgba(96,165,250,.06)"':''}><td><input value="${esc(r.service)}" onchange="importRows[${i}].service=this.value"></td><td><input value="${esc(r.client)}" onchange="importRows[${i}].client=this.value"></td><td><input value="${esc(r.email)}" onchange="importRows[${i}].email=this.value"></td><td><input value="${esc(r.pass)}" onchange="importRows[${i}].pass=this.value"></td><td><input value="${esc(r.admin_email)}" onchange="importRows[${i}].admin_email=this.value"></td><td><input type="date" value="${esc(r.exp)}" onchange="importRows[${i}].exp=this.value"></td><td><input value="${esc(r.phone)}" class="${r.phone?'':'missing'}" onchange="importRows[${i}].phone=this.value;this.classList.toggle('missing',!this.value.trim())"></td><td><button class="rm" onclick="importRows.splice(${i},1);drawReview();document.getElementById('importCount').textContent=importRows.length+' filas'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`).join('')}
+function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}const nUpd=importRows.filter(r=>r._update).length;revLimit=100;$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> cuenta(s) con teléfono ✓: <b>${importRows.length-nUpd}</b> nueva(s)${nUpd?` · <b style="color:var(--blue)">🔁 ${nUpd} renovación(es)</b> (en azul — actualizarán cuentas que ya tienes)`:''}${importDupes?` · ${importDupes} ya al día, omitida(s)`:''}. Solo se muestran de 100 en 100 para mantener todo fluido.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div><div id="revMore" style="text-align:center;margin-top:12px"></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
+let revLimit=100;
+function drawReview(){$('revBody').innerHTML=importRows.slice(0,revLimit).map((r,i)=>`<tr${r._update?' style="background:rgba(96,165,250,.06)"':''}><td><input value="${esc(r.service)}" onchange="importRows[${i}].service=this.value"></td><td><input value="${esc(r.client)}" onchange="importRows[${i}].client=this.value"></td><td><input value="${esc(r.email)}" onchange="importRows[${i}].email=this.value"></td><td><input value="${esc(r.pass)}" onchange="importRows[${i}].pass=this.value"></td><td><input value="${esc(r.admin_email)}" onchange="importRows[${i}].admin_email=this.value"></td><td><input type="date" value="${esc(r.exp)}" onchange="importRows[${i}].exp=this.value"></td><td><input value="${esc(r.phone)}" class="${r.phone?'':'missing'}" onchange="importRows[${i}].phone=this.value;this.classList.toggle('missing',!this.value.trim())"></td><td><button class="rm" onclick="importRows.splice(${i},1);drawReview();document.getElementById('importCount').textContent=importRows.length+' filas'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`).join('');const rm=$('revMore');if(rm)rm.innerHTML=importRows.length>revLimit?`<button class="btn sm" onclick="revLimit+=300;drawReview()">Mostrar 300 más (${importRows.length-revLimit} restantes)</button>`:''}
 async function confirmImport(){
   const valid=importRows.filter(r=>r.service||r.email);
   if(!valid.length){toast('Nada para importar','err');return}
   const news=valid.filter(r=>!r._update).map(r=>({service:r.service||'—',plan:'',client:r.client||'',email:r.email||'',password:r.pass||'',admin_email:r.admin_email||'',is_admin:false,exp:r.exp||null,phone:r.phone||'',notes:''}));
   const ups=valid.filter(r=>r._update);
+  const btn=document.querySelector('#importFoot .btn.primary');
+  if(btn){btn.disabled=true;btn.textContent='Importando…'}
   try{
-    if(news.length){const {data,error}=await supa.from('accounts').insert(news).select();if(error)throw error;db=[...(data||[]),...db]}
+    // cuentas nuevas en lotes de 400 (miles de filas sin trancar el navegador)
+    for(let o=0;o<news.length;o+=400){
+      const {data,error}=await supa.from('accounts').insert(news.slice(o,o+400)).select();
+      if(error)throw error;db=[...(data||[]),...db];
+      if(btn)btn.textContent=`Importando… ${Math.min(o+400,news.length)}/${news.length}`;
+    }
     for(const r of ups){
       const upd={exp:r.exp||null,contacted:false,contacted_at:null};
       if(r.pass)upd.password=r.pass;if(r.phone)upd.phone=r.phone;if(r.client)upd.client=r.client;if(r.admin_email)upd.admin_email=r.admin_email;
       const {data,error}=await supa.from('accounts').update(upd).eq('id',r._update).select().single();if(error)throw error;
       const ix=db.findIndex(x=>x.id===r._update);if(ix>=0)db[ix]=data;
     }
+    // directorio: upsert masivo por lotes (1 petición cada 400, no miles)
+    const byNorm={};
+    valid.forEach(r=>{const n=waNumber(r.phone||'');if(!n)return;
+      byNorm[n]={phone:(r.phone||'').trim(),phone_norm:n,name:r.client||'',email:r.email||'',services:r.service||'',updated_at:new Date().toISOString()}});
+    const cArr=Object.values(byNorm);
+    for(let o=0;o<cArr.length;o+=400){
+      const {error}=await supa.from('contacts').upsert(cArr.slice(o,o+400),{onConflict:'phone_norm'});
+      if(error)console.warn('Directorio:',error.message);
+    }
+    const {data:ct}=await supa.from('contacts').select('*').order('created_at',{ascending:false});if(ct)contacts=ct;
     closeImport();render();
-    valid.filter(r=>r.phone).forEach(r=>saveContact(r.client,r.phone,r.email,r.service));
-    toast(`${news.length} nueva(s) importada(s)`+(ups.length?` · 🔁 ${ups.length} renovada(s)`:''));
+    toast(`${news.length} nueva(s) importada(s)`+(ups.length?` · 🔁 ${ups.length} renovada(s)`:'')+` · ${cArr.length} al directorio`);
   }catch(e){toast(e.message||'Error al importar','err')}
+  if(btn){btn.disabled=false;btn.textContent='Importar'}
 }
 
 /* ============ XLSX ENGINE (admin export) ============ */
