@@ -836,7 +836,19 @@ function daysText(iso){const n=daysUntil(iso);if(n===null)return'';if(n<0)return
 function fmtUSD(n){return '$'+(Math.round((+n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function fmtBs(n){return (Math.round((+n||0)*100)/100).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs'}
 function initials(s){if(!s)return'?';const p=s.trim().split(/\s+/);return(p[0][0]+(p[1]?p[1][0]:'')).toUpperCase()}
-function findProduct(name){return cfg.products.find(p=>p.name.toLowerCase()===(name||'').toLowerCase())}
+/* Búsqueda de producto DIFUSA: "Gemini" encuentra "GEMINI PRO" y viceversa
+   (por palabras contenidas); primero intenta coincidencia exacta */
+function findProduct(name){
+  const n=(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  if(!n)return null;
+  let p=cfg.products.find(x=>(x.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()===n);
+  if(p)return p;
+  const nw=n.split(/\s+/);
+  const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const cands=cfg.products.filter(x=>{const xw=norm(x.name).split(/\s+/).filter(Boolean);return nw.every(w=>xw.includes(w))||xw.every(w=>nw.includes(w))});
+  if(cands.length)return cands.sort((a,b)=>norm(b.name).length-norm(a.name).length)[0];
+  return null;
+}
 
 /* ============ TABS ============ */
 function switchTab(t){if(t==='inc'&&!isAdmin())return;$('tabSubs').classList.toggle('hide',t!=='subs');$('tabInc').classList.toggle('hide',t!=='inc');$('tabSubsBtn').classList.toggle('on',t==='subs');$('tabIncBtn').classList.toggle('on',t==='inc');if(t==='inc')renderInc()}
@@ -1079,7 +1091,7 @@ function saleWho(s){
 async function fixSale(id){
   const s=sales.find(x=>x.id===id);if(!s)return;
   const w=saleWho(s);
-  const v=prompt(`Monto del ingreso en Bs\n${s.product}${w.nombre?' — '+w.nombre:''}${s.plan?' · '+s.plan:''}${w.tel?'\n📱 '+w.tel:''}${w.mail?'\n✉️ '+w.mail:''}\n🗓 '+fmtDate(s.date)+':`);
+  const v=prompt(`Monto del ingreso en Bs\n${s.product}${w.nombre?' — '+w.nombre:''}${s.plan?' · '+s.plan:''}${w.tel?'\n📱 '+w.tel:''}${w.mail?'\n✉️ '+w.mail:''}\n🗓 ${fmtDate(s.date)}:`);
   if(v===null)return;
   const bs=parseFloat(String(v).replace(',','.'));
   if(!(bs>0)){toast('Monto inválido','err');return}
@@ -1348,7 +1360,12 @@ async function savePaste(){
     if(data.admin_email)ensureAdmin(service,data.admin_email);
     const noPhoneWarn=!data.phone;
     let noSaleWarn=false;
-    if(isAdmin()&&$('pLogSale')&&$('pLogSale').checked){const price=parseFloat(get('pPrice'))||0;if(price>0){await logSale(data,todayISO(),price,parseFloat(get('pCost'))||0,pl?pl.label:'')}else{await logPendingSale(data,pl?pl.label:'');noSaleWarn=true}}
+    if(isAdmin()&&$('pLogSale')&&$('pLogSale').checked){
+      let price=parseFloat(get('pPrice'))||0,cost=parseFloat(get('pCost'))||0,plLabel=pl?pl.label:'';
+      // renovación sin precio indicado → usa el plan (y precio) que la cuenta ya tenía
+      if(!(price>0)&&ren&&ren.acc.plan){const prod=findProduct(service);const ip=prod&&prod.plans?prod.plans.find(x=>(x.label||'').toLowerCase()===(ren.acc.plan||'').toLowerCase()):null;if(ip&&Number(ip.priceUSD)>0){price=Number(ip.priceUSD);cost=Number(ip.costUSD)||0;plLabel=ip.label}}
+      if(price>0){await logSale(data,todayISO(),price,cost,plLabel)}else{await logPendingSale(data,plLabel);noSaleWarn=true}
+    }
     closePaste();render();
     if(noSaleWarn)toast('Registrada — 💰 ingreso PENDIENTE de monto (asígnalo en el Panel Admin)','err');
     else if(noPhoneWarn)toast('Registrada SIN teléfono — no entró al directorio de clientes','err');
@@ -1389,7 +1406,10 @@ async function savePasteMulti(blocks){
       if(r.phone){saveContact(r.client,r.phone,r.email,r.service);tel++}else noPhone++;
       if(r.admin_email)await ensureAdmin(r.service,r.admin_email);
       if(isAdmin()&&$('pLogSale')&&$('pLogSale').checked){
-        const pl=it.pl;const price=pl&&Number(pl.priceUSD)>0?Number(pl.priceUSD):0;
+        let pl=it.pl;
+        // renovación sin plan detectado → usa el plan que la cuenta ya tenía
+        if(!pl&&ren&&ren.acc.plan){const prod=findProduct(r.service||ren.acc.service);if(prod&&prod.plans)pl=prod.plans.find(x=>(x.label||'').toLowerCase()===(ren.acc.plan||'').toLowerCase())||null}
+        const price=pl&&Number(pl.priceUSD)>0?Number(pl.priceUSD):0;
         if(price>0)await logSale(r,todayISO(),price,Number(pl.costUSD)||0,pl.label);
         else{await logPendingSale(r,pl?pl.label:'');noPrice++}
       }
