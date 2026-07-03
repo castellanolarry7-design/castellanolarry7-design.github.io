@@ -988,7 +988,10 @@ async function markContacted(id){const r=db.find(x=>x.id===id);if(!r||r.contacte
 function openPay(id){const r=db.find(x=>x.id===id);if(!r)return;$('payOverlay').classList.add('show');$('payId').value=id;$('paySub').textContent=`${r.service} · ${r.client||'Sin nombre'}`;fillPlanSelect('py',r.service,r.plan);$('pyRate').textContent=cfg.rate;set('pyDate',todayISO());onPlanChange('py');payBsHint();payExtendHint()}
 function closePay(){$('payOverlay').classList.remove('show')}
 function payBsHint(){const v=parseFloat(get('pyPrice'))||0;set('pyBs',Math.round(v*cfg.rate*100)/100)}
-function payExtendHint(){const r=db.find(x=>x.id===$('payId').value);if(!r)return;const pl=selectedPlan(r.service,$('pyPlan').value);const m=pl?pl.months:1;$('pyExtendTxt').textContent=$('pyExtend').checked?('→ '+fmtDate(addMonthsISO(r.exp,m))):''}
+/* La renovación entrega el período COMPLETO: si la cuenta ya venció, cuenta
+   desde hoy (sin descontar días vencidos); si sigue activa, suma al vencimiento */
+function renewBase(exp){const t=todayISO();return (exp&&exp>t)?exp:t}
+function payExtendHint(){const r=db.find(x=>x.id===$('payId').value);if(!r)return;const pl=selectedPlan(r.service,$('pyPlan').value);const m=pl?pl.months:1;$('pyExtendTxt').textContent=$('pyExtend').checked?('→ '+fmtDate(addMonthsISO(renewBase(r.exp),m))):''}
 async function savePay(){
   const r=db.find(x=>x.id===$('payId').value);if(!r)return;const pl=selectedPlan(r.service,$('pyPlan').value);
   const price=parseFloat(get('pyPrice'))||0,cost=parseFloat(get('pyCost'))||0,date=get('pyDate')||todayISO();
@@ -996,7 +999,7 @@ async function savePay(){
   try{
     await logSale(r,date,price,cost,pl?pl.label:r.plan);
     const upd={contacted:false,contacted_at:null};
-    if($('pyExtend').checked){const m=pl?pl.months:1;upd.exp=addMonthsISO(r.exp,m);if(pl)upd.plan=pl.label}
+    if($('pyExtend').checked){const m=pl?pl.months:1;upd.exp=addMonthsISO(renewBase(r.exp),m);if(pl)upd.plan=pl.label}
     const {data,error}=await supa.from('accounts').update(upd).eq('id',r.id).select().single();if(error)throw error;
     const i=db.findIndex(x=>x.id===r.id);db[i]=data;
     closePay();render();renderInc();toast('Pago registrado');
