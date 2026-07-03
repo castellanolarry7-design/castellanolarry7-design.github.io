@@ -667,8 +667,15 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
 <div class="overlay" id="batchOverlay"><div class="modal">
   <div class="modal-head"><div><h3>Escribir renovaciones</h3><p id="batchSub"></p></div><button class="x" onclick="closeBatch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
   <div class="modal-body">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+      <span class="mini-label" style="margin:0;flex-shrink:0">Vencen del</span>
+      <input class="filter" type="date" id="bFrom" onchange="applyBatchFilter()" style="flex:1;min-width:130px">
+      <span style="color:var(--txt-faint)">al</span>
+      <input class="filter" type="date" id="bTo" onchange="applyBatchFilter()" style="flex:1;min-width:130px">
+      <button class="btn sm ghost" onclick="$('bFrom').value='';$('bTo').value='';applyBatchFilter()" title="Quitar fechas">✕</button>
+    </div>
     <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-      <select class="filter" id="batchPlanF" onchange="applyBatchFilter()" style="flex:1;min-width:150px"><option value="">Todos los planes</option></select>
+      <select class="filter" id="batchPlanF" onchange="applyBatchFilter(false)" style="flex:1;min-width:150px"><option value="">Todos los planes</option></select>
       <button class="btn sm ghost" onclick="togglePreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> Ver mensaje</button>
     </div>
     <div id="tplPreview" class="tpl-preview hide" style="margin-bottom:14px;max-height:220px;overflow-y:auto"></div>
@@ -1619,19 +1626,33 @@ function planMonthsOf(r){
 let batchAll=[];
 function buildBatchFilter(items){
   const sel=$('batchPlanF');if(!sel)return;
+  const cur=sel.value;
   const counts={};items.forEach(r=>{const m=planMonthsOf(r);const k=(m==null?'other':m);counts[k]=(counts[k]||0)+1});
   const lbl=m=>m===12?'1 año':(m===1?'1 mes':m+' meses');
   const keys=Object.keys(counts).filter(k=>k!=='other').map(Number).sort((a,b)=>a-b);
   sel.innerHTML=`<option value="">Todos los planes (${items.length})</option>`
     +keys.map(m=>`<option value="${m}">${lbl(m)} (${counts[m]})</option>`).join('')
     +(counts.other?`<option value="other">Sin plan definido (${counts.other})</option>`:'');
-  sel.value='';
+  sel.value=[...sel.options].some(o=>o.value===cur)?cur:'';
 }
-function applyBatchFilter(){
+/* Con rango de fechas: la cola son TODAS las cuentas (con teléfono, sin contactar)
+   cuyo vencimiento cae en el rango — ideal para trabajar el día a día */
+function batchPool(){
+  const f=$('bFrom')?$('bFrom').value:'',t=$('bTo')?$('bTo').value:'';
+  if(f||t){
+    return db.filter(r=>r.phone&&!r.contacted&&r.exp&&(!f||r.exp>=f)&&(!t||r.exp<=t))
+             .sort((a,b)=>(a.exp||'').localeCompare(b.exp||''));
+  }
+  return batchAll;
+}
+function applyBatchFilter(rebuild){
+  const pool=batchPool();
+  if(rebuild!==false)buildBatchFilter(pool);
   const v=$('batchPlanF').value;
-  batchQueue=batchAll.filter(r=>{const m=planMonthsOf(r);return !v||(v==='other'?m==null:m===Number(v))});
+  batchQueue=pool.filter(r=>{const m=planMonthsOf(r);return !v||(v==='other'?m==null:m===Number(v))});
   batchIdx=0;drawQueue();
-  $('batchSub').textContent=`${batchQueue.length} cliente(s) en la cola — vencidas primero.`;
+  const f=$('bFrom')?$('bFrom').value:'',t=$('bTo')?$('bTo').value:'';
+  $('batchSub').textContent=`${batchQueue.length} cliente(s) en la cola${(f||t)?` — vencen ${f?'desde '+fmtDate(f):''}${f&&t?' ':''}${t?'hasta '+fmtDate(t):''}`:' — vencidas primero'}.`;
 }
 function updatePreview(){const el=$('tplPreview');if(!el||el.classList.contains('hide'))return;const r=batchQueue[batchIdx];el.textContent=r?buildMessage(r):'— Cola completada —'}
 async function saveTemplate(){if(!isAdmin())return;const t=$('batchTpl').value.trim();
@@ -1659,6 +1680,7 @@ function startBatch(mode){
   else if(mode==='urgent')items=urgentList();
   if(!items.length){toast(mode==='urgent'?'🎉 Nada pendiente: no hay vencidas ni por vencer sin contactar (con teléfono)':'Ninguna seleccionada tiene teléfono','err');return}
   batchAll=items;batchQueue=items;batchIdx=0;
+  if($('bFrom'))$('bFrom').value='';if($('bTo'))$('bTo').value='';
   $('batchOverlay').classList.add('show');
   $('batchSub').textContent=mode==='urgent'?`${items.length} cliente(s) por renovar — vencidas primero.`:'Se abrirá WhatsApp con el mensaje listo para cada cliente.';
   buildBatchFilter(items);
@@ -1729,6 +1751,8 @@ function parseWhatsAppExport(text){
       if(!p.email&&!p.exp&&!p.pass)continue;             // teléfono suelto sin datos → basura
       // el remitente del mensaje es el encargado, NO el cliente: no se usa
       p._ren=REN_RE.test(sub);
+      const pi=detectPlanIdx(p.service,sub,p.exp);
+      if(pi>=0){const pr=findProduct(p.service);if(pr&&pr.plans&&pr.plans[pi])p.plan=pr.plans[pi].label}
       rows.push(p);
     }
   }
@@ -1777,7 +1801,7 @@ function drawReview(){$('revBody').innerHTML=importRows.slice(0,revLimit).map((r
 async function confirmImport(){
   const valid=importRows.filter(r=>r.service||r.email);
   if(!valid.length){toast('Nada para importar','err');return}
-  const news=valid.filter(r=>!r._update).map(r=>({service:r.service||'—',plan:'',client:r.client||'',email:r.email||'',password:r.pass||'',admin_email:r.admin_email||'',is_admin:false,exp:r.exp||null,phone:r.phone||'',notes:''}));
+  const news=valid.filter(r=>!r._update).map(r=>({service:r.service||'—',plan:r.plan||'',client:r.client||'',email:r.email||'',password:r.pass||'',admin_email:r.admin_email||'',is_admin:false,exp:r.exp||null,phone:r.phone||'',notes:''}));
   const ups=valid.filter(r=>r._update);
   const btn=document.querySelector('#importFoot .btn.primary');
   if(btn){btn.disabled=true;btn.textContent='Importando…'}
@@ -1790,6 +1814,7 @@ async function confirmImport(){
     }
     for(const r of ups){
       const upd={exp:r.exp||null,contacted:false,contacted_at:null};
+      if(r.plan)upd.plan=r.plan;
       if(r.pass)upd.password=r.pass;if(r.phone)upd.phone=r.phone;if(r.client)upd.client=r.client;if(r.admin_email)upd.admin_email=r.admin_email;
       const {data,error}=await supa.from('accounts').update(upd).eq('id',r._update).select().single();if(error)throw error;
       const ix=db.findIndex(x=>x.id===r._update);if(ix>=0)db[ix]=data;
