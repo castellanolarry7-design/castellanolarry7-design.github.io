@@ -1501,8 +1501,13 @@ function waOpen(phone,msg){
   const n=waNumber(phone);if(!n)return;
   const enc=encodeURIComponent(msg||'');
   const mobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const url=(mobile?'https://api.whatsapp.com/send?phone=':'https://web.whatsapp.com/send?phone=')+n+'&text='+enc;
-  window.open(url,'_blank','noopener');
+  if(mobile){
+    // esquema nativo: abre la app DIRECTO, sin página de redirección
+    // (la página intermedia de wa.me/api.whatsapp.com corrompe los emojis)
+    location.href='whatsapp://send?phone='+n+'&text='+enc;
+  }else{
+    window.open('https://web.whatsapp.com/send?phone='+n+'&text='+enc,'_blank','noopener');
+  }
 }
 function contactOne(id){const r=db.find(x=>x.id===id);if(!r)return;waOpen(r.phone,buildMessage(r));markContacted(id)}
 function startBatch(mode){
