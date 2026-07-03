@@ -763,15 +763,28 @@ async function loadProfile(){
   const {data}=await supa.from('profiles').select('*').eq('id',user.id).single();
   me=data||{id:user.id,email:user.email,role:'vendedor',name:''};
 }
+/* Trae TODAS las filas de una tabla en páginas de 1000 (límite de Supabase) */
+async function fetchAll(table,orderCol){
+  const out=[];const CH=1000;let from=0;
+  for(;;){
+    let q=supa.from(table).select('*').range(from,from+CH-1);
+    if(orderCol)q=q.order(orderCol,{ascending:false});
+    const {data,error}=await q;
+    if(error)throw error;
+    out.push(...(data||[]));
+    if(!data||data.length<CH)break;
+    from+=CH;
+  }
+  return out;
+}
 async function loadAll(){
-  const {data:acc}=await supa.from('accounts').select('*').order('created_at',{ascending:false});
-  db=acc||[];
+  db=await fetchAll('accounts','created_at');
   if(isAdmin()){
     const {data:st}=await supa.from('settings').select('*').eq('id',1).single();
     if(st)cfg={warnDays:st.warn_days,country:st.country,rate:Number(st.rate)||40,template:st.template,products:st.products||[]};
-    const {data:sl}=await supa.from('sales').select('*'); sales=sl||[];
-    const {data:eg}=await supa.from('egresos').select('*'); egresos=eg||[];
-    const {data:ct}=await supa.from('contacts').select('*').order('created_at',{ascending:false}); contacts=ct||[];
+    sales=await fetchAll('sales');
+    egresos=await fetchAll('egresos');
+    contacts=await fetchAll('contacts','created_at');
     backfillContacts(); // completa el directorio con teléfonos ya existentes en cuentas
   }else{
     const {data:pc}=await supa.from('public_config').select('*').eq('id',1).single();
@@ -1690,7 +1703,7 @@ async function confirmImport(){
       const {error}=await supa.from('contacts').upsert(cArr.slice(o,o+400),{onConflict:'phone_norm'});
       if(error)console.warn('Directorio:',error.message);
     }
-    const {data:ct}=await supa.from('contacts').select('*').order('created_at',{ascending:false});if(ct)contacts=ct;
+    contacts=await fetchAll('contacts','created_at');
     closeImport();render();
     toast(`${news.length} nueva(s) importada(s)`+(ups.length?` · 🔁 ${ups.length} renovada(s)`:'')+` · ${cArr.length} al directorio`);
   }catch(e){toast(e.message||'Error al importar','err')}
