@@ -730,10 +730,16 @@ async function startApp(){
     $('ucRole').textContent=isAdmin()?'Administrador':'Vendedor';
     $('ucAv').textContent=(me.name||me.email||'?').slice(0,1).toUpperCase();
     render();greet();
-  }catch(e){toast('Error cargando datos: '+(e.message||e),'err')}
+  }catch(e){if(e&&e.message==='SESSION_EXPIRED')return;toast('Error cargando datos: '+(e.message||e),'err')}
 }
 async function loadProfile(){
   const {data:{user}}=await supa.auth.getUser();
+  if(!user){ // sesión expirada o inválida: limpiar y volver al login
+    try{await supa.auth.signOut()}catch(_){}
+    $('app').classList.add('hide');showLogin();
+    $('loginErr').textContent='Tu sesión expiró. Inicia sesión de nuevo.';
+    throw new Error('SESSION_EXPIRED');
+  }
   const {data}=await supa.from('profiles').select('*').eq('id',user.id).single();
   me=data||{id:user.id,email:user.email,role:'vendedor',name:''};
 }
