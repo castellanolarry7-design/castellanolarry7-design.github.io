@@ -704,7 +704,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 /* ================================================================== */
 
 let supa=null, me=null, db=[], sales=[], egresos=[], contacts=[], cfg={warnDays:3,country:'58',rate:40,template:'',products:[]};
-let selected=new Set(), importRows=[], batchQueue=[], batchIdx=0, period='today';
+let selected=new Set(), importRows=[], batchQueue=[], batchIdx=0, period='today', incOpenDays=new Set();
 const isAdmin=()=>me&&me.role==='admin';
 const $=id=>document.getElementById(id);
 const esc=s=>(s==null?'':s.toString()).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -822,8 +822,9 @@ async function loadAll(){
 }
 
 /* ============ DATES / MONEY ============ */
-function today(){const d=new Date();d.setHours(0,0,0,0);return d}
-function todayISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+/* Fecha SIEMPRE en hora de Venezuela (America/Caracas), sin importar la zona del equipo/servidor */
+function todayISO(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Caracas',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}catch(e){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}}
+function today(){const p=parseISO(todayISO());if(p)return p;const d=new Date();d.setHours(0,0,0,0);return d}
 function parseISO(s){if(!s)return null;const d=new Date(s+'T00:00:00');return isNaN(d)?null:d}
 function daysUntil(iso){const d=parseISO(iso);if(!d)return null;return Math.round((d-today())/86400000)}
 function addMonthsISO(iso,m){const d=parseISO(iso)||today();const nd=new Date(d);const day=nd.getDate();
@@ -1103,6 +1104,18 @@ async function fixSale(id){
   if(error){toast(error.message,'err');return}
   const i=sales.findIndex(x=>x.id===id);if(i>=0)sales[i]=data;
   renderInc();renderDaily();toast('Ingreso asignado: '+fmtBs(bs));
+}
+/* Mover un ingreso a otro día del cierre (ej. una venta de la madrugada que cuenta al día anterior) */
+async function editSaleDate(id){
+  const s=sales.find(x=>x.id===id);if(!s)return;
+  const v=prompt('Mover este ingreso a otro día (formato AAAA-MM-DD).\nEj.: para que cuente en el día anterior, pon la fecha de ayer.\nFecha actual: '+s.date, s.date);
+  if(v===null)return;
+  const nd=(v||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(nd)){toast('Fecha inválida — usa AAAA-MM-DD','err');return}
+  const {data,error}=await supa.from('sales').update({date:nd}).eq('id',id).select().single();
+  if(error){toast(error.message,'err');return}
+  const i=sales.findIndex(x=>x.id===id);if(i>=0)sales[i]=data;
+  renderInc();renderDaily();toast('Movido al '+fmtDate(nd));
 }
 async function logSale(acc,date,price,cost,plan){
   const rec={date,account_id:acc?acc.id:null,product:acc?acc.service:'(manual)',client:acc?acc.client:'',plan:plan||'',qty:1,price_usd:+price||0,cost_usd:+cost||0,rate:cfg.rate};
@@ -1475,7 +1488,7 @@ async function saveManual(){
 
 /* ============ INCOME VIEW (admin) ============ */
 function setPeriod(p){period=p;document.querySelectorAll('#periodSeg button').forEach(b=>b.classList.toggle('on',b.dataset.p===p));$('rangeBox').classList.toggle('hide',p!=='custom');if(p==='custom'&&!$('rFrom').value){set('rFrom',todayISO());set('rTo',todayISO())}renderInc()}
-function periodRange(){const t=new Date();t.setHours(0,0,0,0);const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;if(period==='today')return[iso(t),iso(t),'Hoy · '+fmtDate(iso(t))];if(period==='week'){const d=new Date(t);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);const e=new Date(d);e.setDate(d.getDate()+6);return[iso(d),iso(e),'Semana · '+fmtDate(iso(d))+' – '+fmtDate(iso(e))]}if(period==='month'){const d=new Date(t.getFullYear(),t.getMonth(),1);const e=new Date(t.getFullYear(),t.getMonth()+1,0);return[iso(d),iso(e),'Mes · '+d.toLocaleDateString('es-VE',{month:'long',year:'numeric'})]}if(period==='custom'){const f=$('rFrom').value||iso(t),tt=$('rTo').value||iso(t);return[f,tt,'Rango · '+fmtDate(f)+' – '+fmtDate(tt)]}return['0000-01-01','9999-12-31','Todo el historial']}
+function periodRange(){const t=today();const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;if(period==='today')return[iso(t),iso(t),'Hoy · '+fmtDate(iso(t))];if(period==='week'){const d=new Date(t);const dow=(d.getDay()+6)%7;d.setDate(d.getDate()-dow);const e=new Date(d);e.setDate(d.getDate()+6);return[iso(d),iso(e),'Semana · '+fmtDate(iso(d))+' – '+fmtDate(iso(e))]}if(period==='month'){const d=new Date(t.getFullYear(),t.getMonth(),1);const e=new Date(t.getFullYear(),t.getMonth()+1,0);return[iso(d),iso(e),'Mes · '+d.toLocaleDateString('es-VE',{month:'long',year:'numeric'})]}if(period==='custom'){const f=$('rFrom').value||iso(t),tt=$('rTo').value||iso(t);return[f,tt,'Rango · '+fmtDate(f)+' – '+fmtDate(tt)]}return['0000-01-01','9999-12-31','Todo el historial']}
 function inRange(date,from,to){return date>=from&&date<=to}
 function saleBs(s){return s.manual_bs!=null?Number(s.manual_bs):(Number(s.price_usd)*(Number(s.rate)||cfg.rate))}
 function saleCostBs(s){return (Number(s.cost_usd)||0)*(Number(s.rate)||cfg.rate)}
@@ -1483,6 +1496,7 @@ function saleUSD(s){return s.manual_bs!=null?(Number(s.manual_bs)/(Number(s.rate
 function saleCostUSD(s){return Number(s.cost_usd)||0}
 function egresoBs(e){return Number(e.monto_bs)||0}
 function egresoUSD(e){return e.monto_usd?Number(e.monto_usd):(Number(e.monto_bs)||0)/(Number(e.rate)||cfg.rate||1)}
+function toggleIncDay(k){if(incOpenDays.has(k))incOpenDays.delete(k);else incOpenDays.add(k);renderInc()}
 function renderInc(){
   if(!isAdmin())return;
   const[from,to,label]=periodRange();$('periodLabel').textContent=label;
@@ -1490,7 +1504,7 @@ function renderInc(){
   const ingBs=vs.reduce((a,s)=>a+saleBs(s),0),egVentaBs=vs.reduce((a,s)=>a+saleCostBs(s),0),egManualBs=egs.reduce((a,e)=>a+(Number(e.monto_bs)||0),0);
   const egBs=egVentaBs+egManualBs,gan=ingBs-egBs;
   $('incStats').innerHTML=`<div class="stat inc"><div class="num sm">${fmtBs(ingBs)}</div><div class="lbl">Ingresos</div><div class="sub">${vs.length} venta(s)</div></div><div class="stat eg"><div class="num sm">${fmtBs(egBs)}</div><div class="lbl">Egresos</div><div class="sub">costos + gastos</div></div><div class="stat gan"><div class="num sm">${fmtBs(gan)}</div><div class="lbl">Ganancia neta</div><div class="sub">${gan>=0?'positiva':'negativa'}</div></div><div class="stat"><div class="num sm">${fmtUSD(vs.reduce((a,s)=>a+saleUSD(s),0))}</div><div class="lbl">Ingresos en USD</div><div class="sub">tasa ×${cfg.rate}</div></div>`;
-  const byDay={};vs.forEach(s=>{(byDay[s.date]=byDay[s.date]||[]).push(s)});const days=Object.keys(byDay).sort().reverse();
+  const byDay={};vs.forEach(s=>{(byDay[s.date]=byDay[s.date]||[]).push(s)});Object.values(byDay).forEach(a=>a.sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||''))));const days=Object.keys(byDay).sort().reverse();
   let html='';
   const pend=sales.filter(x=>x.pending);
   if(pend.length){
@@ -1502,8 +1516,8 @@ function renderInc(){
   if(!vs.length&&!egs.length){html=`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg><h3>Sin movimientos en este periodo</h3><p>Al registrar o renovar cuentas los ingresos aparecen aquí.</p></div>`}
   else{
     html+='<div class="tbl-scroll"><table class="dt"><thead><tr><th>Fecha</th><th>Producto</th><th>Cliente/Concepto</th><th>Plan</th><th class="num">Cant.</th><th class="num">Venta USD</th><th class="num">Costo Bs</th><th class="num">Ingreso Bs</th><th></th></tr></thead><tbody>';
-    days.forEach(day=>{const items=byDay[day];const dtot=items.reduce((a,s)=>a+saleBs(s),0);const dcost=items.reduce((a,s)=>a+saleCostBs(s),0);html+=`<tr class="daygroup"><td colspan="6">${fmtDate(day)} — ${items.length} venta(s)</td><td class="num">${dcost?'-'+fmtBs(dcost):'—'}</td><td class="num">${fmtBs(dtot)}</td><td></td></tr>`;items.forEach(s=>{const w=saleWho(s);html+=`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.product)}</td><td>${esc(w.nombre||'—')}${w.tel?`<div style="color:var(--txt-faint);font-size:11px;white-space:nowrap">📱 ${esc(w.tel)}</div>`:''}${s.pending&&w.mail?`<div style="color:var(--txt-faint);font-size:11px">✉️ ${esc(w.mail)}</div>`:''}</td><td>${esc(s.plan||'—')}</td><td class="num">${s.qty}</td><td class="num">${s.pending?'<span class="badge b-soon" style="font-size:10px;padding:3px 8px">PENDIENTE</span>':(s.manual_bs!=null?'—':fmtUSD(s.price_usd))}</td><td class="num neg">${s.pending?'—':(saleCostBs(s)?'-'+fmtBs(saleCostBs(s)):'—')}</td><td class="num pos">${s.pending?`<button class="btn sm" style="border-color:var(--blue);color:var(--blue)" onclick="fixSale('${s.id}')">💰 Asignar</button>`:fmtBs(saleBs(s))}</td><td><button class="rm" onclick="delSale('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})});
-    if(egs.length){html+=`<tr class="daygroup"><td colspan="7">Egresos manuales / gastos</td><td class="num">-${fmtBs(egManualBs)}</td><td></td></tr>`;egs.forEach(e=>{html+=`<tr><td>${fmtDate(e.date)}</td><td>Egreso</td><td>${esc(e.concept)}</td><td>—</td><td class="num">—</td><td class="num">${e.monto_usd?fmtUSD(e.monto_usd):'—'}</td><td class="num neg">-${fmtBs(e.monto_bs)}</td><td class="num">—</td><td><button class="rm" onclick="delEgreso('${e.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})}
+    days.forEach(day=>{const items=byDay[day];const dtot=items.reduce((a,s)=>a+saleBs(s),0);const dcost=items.reduce((a,s)=>a+saleCostBs(s),0);const open=incOpenDays.has(day);html+=`<tr class="daygroup" style="cursor:pointer" onclick="toggleIncDay('${day}')"><td colspan="6">${open?'▾':'▸'} ${fmtDate(day)} — ${items.length} venta(s)</td><td class="num">${dcost?'-'+fmtBs(dcost):'—'}</td><td class="num">${fmtBs(dtot)}</td><td></td></tr>`;if(open)items.forEach(s=>{const w=saleWho(s);html+=`<tr><td style="white-space:nowrap">${fmtDate(s.date)} <button class="rm" title="Mover a otro día (cierre)" onclick="editSaleDate('${s.id}')" style="padding:0 3px">✎</button></td><td>${esc(s.product)}</td><td>${esc(w.nombre||'—')}${w.tel?`<div style="color:var(--txt-faint);font-size:11px;white-space:nowrap">📱 ${esc(w.tel)}</div>`:''}${s.pending&&w.mail?`<div style="color:var(--txt-faint);font-size:11px">✉️ ${esc(w.mail)}</div>`:''}</td><td>${esc(s.plan||'—')}</td><td class="num">${s.qty}</td><td class="num">${s.pending?'<span class="badge b-soon" style="font-size:10px;padding:3px 8px">PENDIENTE</span>':(s.manual_bs!=null?'—':fmtUSD(s.price_usd))}</td><td class="num neg">${s.pending?'—':(saleCostBs(s)?'-'+fmtBs(saleCostBs(s)):'—')}</td><td class="num pos">${s.pending?`<button class="btn sm" style="border-color:var(--blue);color:var(--blue)" onclick="fixSale('${s.id}')">💰 Asignar</button>`:fmtBs(saleBs(s))}</td><td><button class="rm" onclick="delSale('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})});
+    if(egs.length){const egOpen=incOpenDays.has('eg');html+=`<tr class="daygroup" style="cursor:pointer" onclick="toggleIncDay('eg')"><td colspan="7">${egOpen?'▾':'▸'} Egresos manuales / gastos</td><td class="num">-${fmtBs(egManualBs)}</td><td></td></tr>`;if(egOpen)egs.forEach(e=>{html+=`<tr><td>${fmtDate(e.date)}</td><td>Egreso</td><td>${esc(e.concept)}</td><td>—</td><td class="num">—</td><td class="num">${e.monto_usd?fmtUSD(e.monto_usd):'—'}</td><td class="num neg">-${fmtBs(e.monto_bs)}</td><td class="num">—</td><td><button class="rm" onclick="delEgreso('${e.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`})}
     html+='</tbody></table></div>';
     const byProd={};vs.forEach(s=>{(byProd[s.product]=byProd[s.product]||{q:0,bs:0,c:0});byProd[s.product].q+=s.qty;byProd[s.product].bs+=saleBs(s);byProd[s.product].c+=saleCostBs(s)});
     html+='<div style="margin-top:22px"><div class="mini-label">Resumen por producto</div><div class="tbl-scroll"><table class="dt"><thead><tr><th>Producto</th><th class="num">Ventas</th><th class="num">Ingresos Bs</th><th class="num">Costos Bs</th><th class="num">Ganancia Bs</th></tr></thead><tbody>'+Object.entries(byProd).sort((a,b)=>b[1].bs-a[1].bs).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v.q}</td><td class="num pos">${fmtBs(v.bs)}</td><td class="num neg">${v.c?'-'+fmtBs(v.c):'—'}</td><td class="num">${fmtBs(v.bs-v.c)}</td></tr>`).join('')+'</tbody></table></div></div>';
