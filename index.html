@@ -834,8 +834,18 @@ async function loadAll(){await loadCore();await loadExtras();}
 
 /* ============ DATES / MONEY ============ */
 /* Fecha SIEMPRE en hora de Venezuela (America/Caracas), sin importar la zona del equipo/servidor */
-function todayISO(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Caracas',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}catch(e){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}}
-function today(){const p=parseISO(todayISO());if(p)return p;const d=new Date();d.setHours(0,0,0,0);return d}
+/* El formateador se crea UNA sola vez y el resultado se cachea: today()/daysUntil()/statusOf()
+   se llaman miles de veces al renderizar, y crear un Intl.DateTimeFormat cada vez es carísimo. */
+const _vetFmt=(()=>{try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Caracas',year:'numeric',month:'2-digit',day:'2-digit'})}catch(e){return null}})();
+let _todayISO=null,_todayAt=0,_todayDt=null;
+function todayISO(){
+  const now=Date.now();
+  if(_todayISO&&now-_todayAt<30000)return _todayISO;
+  if(_vetFmt)_todayISO=_vetFmt.format(new Date());
+  else{const d=new Date();_todayISO=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+  _todayAt=now;_todayDt=null;return _todayISO;
+}
+function today(){if(_todayDt)return _todayDt;const p=parseISO(todayISO());_todayDt=p||(function(){const d=new Date();d.setHours(0,0,0,0);return d})();return _todayDt}
 function parseISO(s){if(!s)return null;const d=new Date(s+'T00:00:00');return isNaN(d)?null:d}
 function daysUntil(iso){const d=parseISO(iso);if(!d)return null;return Math.round((d-today())/86400000)}
 function addMonthsISO(iso,m){const d=parseISO(iso)||today();const nd=new Date(d);const day=nd.getDate();
@@ -843,7 +853,8 @@ function addMonthsISO(iso,m){const d=parseISO(iso)||today();const nd=new Date(d)
   nd.setDate(Math.min(day,new Date(nd.getFullYear(),nd.getMonth()+1,0).getDate())); // 31 ene +1 mes → 28/29 feb, no 3 mar
   return `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}-${String(nd.getDate()).padStart(2,'0')}`}
 function statusOf(iso){const n=daysUntil(iso);if(n===null)return{key:'active',label:'Sin fecha',cls:'b-act'};if(n<0)return{key:'expired',label:'Vencido',cls:'b-exp'};if(n===0)return{key:'today',label:'Vence hoy',cls:'b-exp'};if(n<=cfg.warnDays)return{key:'soon',label:'Por vencer',cls:'b-soon'};return{key:'active',label:'Activo',cls:'b-act'}}
-function fmtDate(iso){const d=parseISO(iso);if(!d)return'—';return d.toLocaleDateString('es-VE',{day:'2-digit',month:'short',year:'numeric'})}
+const _dmyFmt=(()=>{try{return new Intl.DateTimeFormat('es-VE',{day:'2-digit',month:'short',year:'numeric'})}catch(e){return null}})();
+function fmtDate(iso){const d=parseISO(iso);if(!d)return'—';return _dmyFmt?_dmyFmt.format(d):d.toLocaleDateString('es-VE',{day:'2-digit',month:'short',year:'numeric'})}
 function daysText(iso){const n=daysUntil(iso);if(n===null)return'';if(n<0)return`hace ${-n} día${-n>1?'s':''}`;if(n===0)return'hoy';if(n===1)return'mañana';return`en ${n} días`}
 function fmtUSD(n){return '$'+(Math.round((+n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function fmtBs(n){return (Math.round((+n||0)*100)/100).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Bs'}
