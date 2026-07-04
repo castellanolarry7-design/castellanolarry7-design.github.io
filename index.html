@@ -1621,13 +1621,25 @@ async function saveContact(client,phone,email,service){
     if(isAdmin())renderContacts();
   }catch(e){console.warn('Directorio: no se pudo guardar el contacto —',e.message||e)}
 }
+let didBackfill=false;
 async function backfillContacts(){
+  if(didBackfill)return; didBackfill=true;            // una sola vez por sesión
   try{
     const have=new Set(contacts.map(c=>c.phone_norm));
-    const missing=db.filter(r=>r.phone&&waNumber(r.phone)&&!have.has(waNumber(r.phone)));
-    const seen=new Set();
-    for(const r of missing){const n=waNumber(r.phone);if(seen.has(n))continue;seen.add(n);await saveContact(r.client,r.phone,r.email,r.service)}
-  }catch(e){console.warn('Backfill directorio:',e.message||e)}
+    const seen=new Set(); const recs=[];
+    for(const r of db){
+      const n=r.phone?waNumber(r.phone):''; if(!n||have.has(n)||seen.has(n))continue; seen.add(n);
+      recs.push({phone:(r.phone||'').trim(),phone_norm:n,name:(r.client||'').trim(),email:(r.email||'').trim(),services:r.service||'',updated_at:new Date().toISOString()});
+    }
+    if(!recs.length)return;
+    // una escritura por LOTE (no una por fila) y sin redibujar en cada paso
+    for(let i=0;i<recs.length;i+=400){
+      const {data,error}=await supa.from('contacts').upsert(recs.slice(i,i+400),{onConflict:'phone_norm'}).select();
+      if(error)throw error;
+      (data||[]).forEach(d=>{const j=contacts.findIndex(c=>c.phone_norm===d.phone_norm);if(j>=0)contacts[j]=d;else contacts.push(d)});
+    }
+    if(isAdmin())renderContacts();
+  }catch(e){console.warn('Backfill directorio:',(e&&e.message)||e)}
 }
 function contactsFiltered(){
   const q=($('ctSearch')?$('ctSearch').value:'').toLowerCase().trim();
