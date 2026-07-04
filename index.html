@@ -769,7 +769,7 @@ async function doLogin(){
 async function logout(){await supa.auth.signOut()}
 async function startApp(){
   try{
-    await loadProfile();await loadAll();
+    await loadProfile();await loadCore();
     document.body.classList.toggle('is-admin',isAdmin());
     // Para vendedores: eliminar del DOM todo lo de admin (ingresos, usuarios, precios, eliminar...)
     if(!isAdmin()){document.querySelectorAll('.admin-only').forEach(el=>el.remove());const tb=document.querySelector('.tabs');if(tb)tb.style.display='none';}
@@ -778,6 +778,7 @@ async function startApp(){
     $('ucRole').textContent=isAdmin()?'Administrador':'Vendedor';
     $('ucAv').textContent=(me.name||me.email||'?').slice(0,1).toUpperCase();
     render();greet();wireRealtime();
+    loadExtras(); // ingresos/directorio en segundo plano: la app ya está usable
   }catch(e){if(e&&e.message==='SESSION_EXPIRED')return;toast('Error cargando datos: '+(e.message||e),'err')}
 }
 async function loadProfile(){
@@ -806,20 +807,30 @@ async function fetchAll(table,orderCol){
   }
   return out;
 }
-async function loadAll(){
+/* Núcleo: lo mínimo para mostrar la app rápido (cuentas + configuración) */
+async function loadCore(){
   db=await fetchAll('accounts','created_at');
   if(isAdmin()){
     const {data:st}=await supa.from('settings').select('*').eq('id',1).single();
     if(st)cfg={warnDays:st.warn_days,country:st.country,rate:Number(st.rate)||40,template:st.template,products:st.products||[]};
-    sales=await fetchAll('sales');
-    egresos=await fetchAll('egresos');
-    contacts=await fetchAll('contacts','created_at');
-    backfillContacts(); // completa el directorio con teléfonos ya existentes en cuentas
   }else{
     const {data:pc}=await supa.from('public_config').select('*').eq('id',1).single();
     if(pc)cfg={warnDays:pc.warn_days,country:pc.country,rate:0,template:pc.template,products:pc.catalog||[]};
   }
 }
+/* Datos pesados (ingresos, egresos, directorio): en SEGUNDO PLANO y en PARALELO,
+   para que la página abra de inmediato en vez de esperar a que baje todo */
+async function loadExtras(){
+  if(!isAdmin())return;
+  try{
+    const [sl,eg,ct]=await Promise.all([fetchAll('sales'),fetchAll('egresos'),fetchAll('contacts','created_at')]);
+    sales=sl;egresos=eg;contacts=ct;
+    if(!$('tabInc').classList.contains('hide'))renderInc();
+    renderContacts();
+    backfillContacts(); // completa el directorio en segundo plano (no bloquea)
+  }catch(e){console.warn('Carga de ingresos/directorio:',(e&&e.message)||e)}
+}
+async function loadAll(){await loadCore();await loadExtras();}
 
 /* ============ DATES / MONEY ============ */
 /* Fecha SIEMPRE en hora de Venezuela (America/Caracas), sin importar la zona del equipo/servidor */
@@ -1112,10 +1123,10 @@ async function editSaleDate(id){
   if(v===null)return;
   const nd=(v||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(nd)){toast('Fecha inválida — usa AAAA-MM-DD','err');return}
-  const {data,error}=await supa.from('sales').update({date:nd}).eq('id',id).select().single();
-  if(error){toast(error.message,'err');return}
-  const i=sales.findIndex(x=>x.id===id);if(i>=0)sales[i]=data;
-  renderInc();renderDaily();toast('Movido al '+fmtDate(nd));
+  const old=s.date;s.date=nd;incOpenDays.add(nd);renderInc();renderDaily(); // instantáneo (optimista)
+  const {error}=await supa.from('sales').update({date:nd}).eq('id',id);
+  if(error){s.date=old;renderInc();renderDaily();toast('No se pudo mover: '+(error.message||error),'err');return}
+  toast('Movido al '+fmtDate(nd));
 }
 async function logSale(acc,date,price,cost,plan){
   const rec={date,account_id:acc?acc.id:null,product:acc?acc.service:'(manual)',client:acc?acc.client:'',plan:plan||'',qty:1,price_usd:+price||0,cost_usd:+cost||0,rate:cfg.rate};
