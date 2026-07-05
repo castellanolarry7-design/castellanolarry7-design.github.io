@@ -697,7 +697,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v2.8 · telefonos de todo el mundo + fechas flexibles';
+const APP_VERSION='v2.9 · doble candado anti-duplicados al subir';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
@@ -1928,7 +1928,14 @@ function drawReview(){$('revBody').innerHTML=importRows.slice(0,revLimit).map((r
 async function confirmImport(){
   const valid=importRows.filter(r=>r.service||r.email);
   if(!valid.length){toast('Nada para importar','err');return}
-  const news=valid.filter(r=>!r._update).map(r=>({service:r.service||'—',plan:r.plan||'',client:r.client||'',email:r.email||'',password:r.pass||'',admin_email:r.admin_email||'',is_admin:false,exp:r.exp||null,phone:r.phone||'',notes:''}));
+  let news=valid.filter(r=>!r._update).map(r=>({service:r.service||'—',plan:r.plan||'',client:r.client||'',email:r.email||'',password:r.pass||'',admin_email:r.admin_email||'',is_admin:false,exp:r.exp||null,phone:r.phone||'',notes:''}));
+  // 2º candado anti-duplicados AL SUBIR: nunca inserta una repetida (aunque la base cambió o algo se coló),
+  // ni dos iguales dentro del mismo lote. Coincidencia: correo+servicio+teléfono.
+  const _n=s=>(s||'').toLowerCase();
+  const dK=new Set(),dES=new Set(),dP=new Set();
+  db.forEach(a=>{const s=_n(a.service),p=a.phone?waNumber(a.phone):'',e=_n(a.email);if(e){dK.add(e+'|'+s+'|'+p);dES.add(e+'|'+s)}if(p)dP.add(s+'|'+p)});
+  const _seen=new Set();let blocked=0;
+  news=news.filter(r=>{const e=_n(r.email),s=_n(r.service),p=r.phone?waNumber(r.phone):'';let dup=false;if(e)dup=p?dK.has(e+'|'+s+'|'+p):dES.has(e+'|'+s);else if(p)dup=dP.has(s+'|'+p);const bk=e?(e+'|'+s+'|'+p):(p?('t|'+s+'|'+p):'x'+Math.random());if(dup||_seen.has(bk)){blocked++;return false}_seen.add(bk);return true});
   const ups=valid.filter(r=>r._update);
   const btn=document.querySelector('#importFoot .btn.primary');
   if(btn){btn.disabled=true;btn.textContent='Importando…'}
@@ -1958,7 +1965,7 @@ async function confirmImport(){
     contacts=await fetchAll('contacts','created_at');
     for(const r of valid){if(r.admin_email)await ensureAdmin(r.service,r.admin_email)}
     closeImport();render();
-    toast(`${news.length} nueva(s) importada(s)`+(ups.length?` · 🔁 ${ups.length} renovada(s)`:'')+` · ${cArr.length} al directorio`);
+    toast(`${news.length} nueva(s) importada(s)`+(blocked?` · 🛡️ ${blocked} repetida(s) bloqueada(s)`:'')+` · ${cArr.length} al directorio`);
   }catch(e){toast(e.message||'Error al importar','err')}
   if(btn){btn.disabled=false;btn.textContent='Importar'}
 }
