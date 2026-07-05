@@ -697,7 +697,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v2.5 · importar solo faltantes (sin duplicar)';
+const APP_VERSION='v2.8 · telefonos de todo el mundo + fechas flexibles';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
@@ -1164,7 +1164,7 @@ const MONTHS={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,set:9,oct:10
 function toISO(y,m,d){y=+y;m=+m;d=+d;if(y<100)y+=2000;if(m<1||m>12||d<1||d>31)return null;
   const last=new Date(y,m,0).getDate();if(d>last)d=last; // 29/02 en año no bisiesto, 31/04... → último día real del mes
   return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
-function findDate(text){let m=text.match(/(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/);if(m)return toISO(m[1],m[2],m[3]);m=text.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/);if(m)return toISO(m[3],m[2],m[1]);m=text.match(/(\d{1,2})\s*(?:de\s*)?([a-záéíóú]{3,})\.?\s*(?:de\s*)?(\d{4})/i);if(m){const mo=MONTHS[m[2].toLowerCase().slice(0,3)]||MONTHS[m[2].toLowerCase()];if(mo)return toISO(m[3],mo,m[1])}return null}
+function findDate(text){let m=text.match(/(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/);if(m)return toISO(m[1],m[2],m[3]);m=text.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/);if(m)return toISO(m[3],m[2],m[1]);m=text.match(/(\d{1,2})\s*(?:de\s*)?([a-záéíóú]{3,})\.?\s*(?:del?\s*)?(\d{2,4})/i);if(m){const mo=MONTHS[m[2].toLowerCase().slice(0,3)]||MONTHS[m[2].toLowerCase()];if(mo)return toISO(m[3],mo,m[1])}return null}
 /* Normaliza texto de WhatsApp: guiones unicode (‑ – —), espacios invisibles,
    caracteres de ancho cero y encabezados tipo "[2/7/2026 5:10 a. m.] Fulano:" */
 function normMsg(s){
@@ -1203,10 +1203,10 @@ function findPhone(text){
   const cc=(cfg.country||'').replace(/\D/g,'');
   for(const c of cands){
     const digits=c.v.replace(/\D/g,'');
-    if(digits.length<9||digits.length>15)continue;
+    if(digits.length<8||digits.length>15)continue;   // 8-15 díg.: cubre números de cualquier país (E.164)
     let s=c.bonus;
-    if(/^\s*\+/.test(c.v))s+=4;
-    if(cc&&digits.startsWith(cc))s+=3;
+    if(/^\s*\+/.test(c.v))s+=5;                        // '+' = internacional explícito, muy fiable
+    if(cc&&digits.startsWith(cc))s+=2;                 // código local (ligero, ya no domina)
     if(/^0\d/.test(digits))s+=2;
     if(digits.length>=10&&digits.length<=13)s+=1;
     if(s>bs){bs=s;best=c.v.trim()}
@@ -1838,7 +1838,7 @@ function handleFile(file){if(!file)return;const rd=new FileReader();rd.onload=e=
 function importJSON(text){importDupes=0;importNoPhone=0;try{const data=JSON.parse(text);const arr=Array.isArray(data)?data:(data.records||data.db||[]);importRows=arr.map(r=>({service:r.service||'',client:r.client||'',email:r.email||'',pass:r.pass||r.password||'',exp:r.exp||'',phone:r.phone||'',admin_email:r.admin_email||''}));showReview()}catch(e){toast('JSON inválido','err')}}
 function importCSVfile(text){importDupes=0;importNoPhone=0;const lines=text.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return;const headers=splitCSV(lines[0]).map(h=>h.toLowerCase().trim());const map={servicio:'service',service:'service',producto:'service',cliente:'client',nombre:'client',correo:'email',email:'email','contraseña':'pass',clave:'pass',pass:'pass',vencimiento:'exp',vence:'exp',exp:'exp',fecha:'exp',telefono:'phone','teléfono':'phone',contacto:'phone',phone:'phone',admin:'admin_email',administrador:'admin_email'};importRows=lines.slice(1).map(l=>{const c=splitCSV(l);const o={service:'',client:'',email:'',pass:'',exp:'',phone:'',admin_email:''};headers.forEach((h,i)=>{const f=map[h];if(f)o[f]=(c[i]||'').trim()});if(o.exp)o.exp=findDate(o.exp)||'';return o});showReview()}
 function splitCSV(line){const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(q&&line[i+1]==='"'){cur+='"';i++}else q=!q}else if(ch===','&&!q){out.push(cur);cur=''}else cur+=ch}out.push(cur);return out}
-let importDupes=0,importNoPhone=0;
+let importDupes=0,importNoPhone=0,importSkipped=0;
 function parseWhatsAppExport(text){
   // normalizar espacios raros ANTES de detectar encabezados (iPhone usa U+202F en la hora)
   text=text.replace(/[\u00A0\u2000-\u200A\u202F\u3000]/g,' ');
@@ -1900,7 +1900,11 @@ function parseWhatsAppExport(text){
   }
   // sin teléfono no entra: pero solo DESPUÉS de fusionar, así una renovación
   // sin número hereda el teléfono del mensaje anterior del mismo correo
-  const merged=[...[].concat(...byKey.values()),...byPhone.values()].filter(r=>r.email||r.phone);
+  // Solo cuentas REALES: deben tener al menos número O fecha de vencimiento
+  // (así NO entran los miles de correos sueltos mencionados en el chat sin datos)
+  const _all=[...[].concat(...byKey.values()),...byPhone.values()];
+  const merged=_all.filter(r=>r.phone||r.exp);
+  importSkipped=_all.length-merged.length;
   // SOLO agregar las que faltan. Si ya existe (mismo correo+servicio+teléfono) se OMITE.
   // NO actualiza nada (no son renovaciones). En cuentas compartidas cada teléfono es una persona distinta.
   const norm=s=>(s||'').toLowerCase();
@@ -1918,7 +1922,7 @@ function parseWhatsAppExport(text){
   importRows=out;importNoPhone=out.filter(r=>!r.phone).length;
   showReview();
 }
-function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}const nUpd=importRows.filter(r=>r._update).length;revLimit=100;$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> cuenta(s)${importNoPhone?` (<b>${importNoPhone}</b> sin teléfono — complétalo si quieres)`:''}: <b>${importRows.length-nUpd}</b> nueva(s)${nUpd?` · <b style="color:var(--blue)">🔁 ${nUpd} renovación(es)</b> (en azul — actualizarán cuentas que ya tienes)`:''}${importDupes?` · ${importDupes} ya al día, omitida(s)`:''}. Solo se muestran de 100 en 100 para mantener todo fluido.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div><div id="revMore" style="text-align:center;margin-top:12px"></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
+function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}const nUpd=importRows.filter(r=>r._update).length;revLimit=100;$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">✅ <b>${importRows.length}</b> cuenta(s) NUEVA(S) por agregar${importDupes?` · <b>${importDupes}</b> ya estaban registradas (omitidas)`:''}${importSkipped?` · <b>${importSkipped}</b> ignoradas por no tener número ni fecha`:''}${importNoPhone?` · ${importNoPhone} sin teléfono (opcional)`:''}. Esta lista son SOLO las que faltan: revísalas y pulsa <b>Importar</b>. (Se muestran de 100 en 100.)</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div><div id="revMore" style="text-align:center;margin-top:12px"></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
 let revLimit=100;
 function drawReview(){$('revBody').innerHTML=importRows.slice(0,revLimit).map((r,i)=>`<tr${r._update?' style="background:rgba(96,165,250,.06)"':''}><td><input value="${esc(r.service)}" onchange="importRows[${i}].service=this.value"></td><td><input value="${esc(r.client)}" onchange="importRows[${i}].client=this.value"></td><td><input value="${esc(r.email)}" onchange="importRows[${i}].email=this.value"></td><td><input value="${esc(r.pass)}" onchange="importRows[${i}].pass=this.value"></td><td><input value="${esc(r.admin_email)}" onchange="importRows[${i}].admin_email=this.value"></td><td><input type="date" value="${esc(r.exp)}" onchange="importRows[${i}].exp=this.value"></td><td><input value="${esc(r.phone)}" class="${r.phone?'':'missing'}" onchange="importRows[${i}].phone=this.value;this.classList.toggle('missing',!this.value.trim())"></td><td><button class="rm" onclick="importRows.splice(${i},1);drawReview();document.getElementById('importCount').textContent=importRows.length+' filas'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`).join('');const rm=$('revMore');if(rm)rm.innerHTML=importRows.length>revLimit?`<button class="btn sm" onclick="revLimit+=300;drawReview()">Mostrar 300 más (${importRows.length-revLimit} restantes)</button>`:''}
 async function confirmImport(){
