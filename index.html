@@ -486,6 +486,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
       <button class="btn ghost icon" id="reloadBtn" onclick="reloadData()" title="Actualizar datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
       <button class="btn ghost sm" onclick="openImport()" title="Importar chat / respaldo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
       <button class="btn ghost icon admin-only" onclick="openUsers()" title="Usuarios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>
+      <button class="btn ghost icon admin-only" onclick="openCleanup()" title="Limpieza / depurar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg></button>
       <div class="userchip"><div class="ui"><b id="ucName">—</b><small id="ucRole">—</small></div><div class="av" id="ucAv">?</div></div>
       <button class="btn ghost icon" onclick="logout()" title="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></button>
     </div>
@@ -688,6 +689,12 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   <div class="modal-foot"><span style="margin-right:auto;color:var(--txt-dim);font-size:13px;align-self:center" id="batchProgress"></span><button class="btn ghost" onclick="closeBatch()">Cerrar</button></div>
 </div></div>
 
+<div class="overlay" id="cleanupOverlay"><div class="modal">
+  <div class="modal-head"><div><h3>Limpieza / depurar</h3><p>Borra cuentas incompletas o de servicios que no sirven. ⚠️ Es permanente.</p></div><button class="x" onclick="closeCleanup()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+  <div class="modal-body" id="cleanupBody"></div>
+  <div class="modal-foot"><button class="btn ghost" onclick="closeCleanup()">Cerrar</button></div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
@@ -697,7 +704,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v2.9 · doble candado anti-duplicados al subir';
+const APP_VERSION='v3.0 · limpieza: sin fecha y por servicio';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
@@ -1562,6 +1569,37 @@ function renderInc(){
   const bt=$('batchTpl');
   if(bt&&document.activeElement!==bt&&!bt.value)bt.value=(cfg.template&&cfg.template.trim())?cfg.template:DEFAULT_TPL;
   renderCharts();renderContacts();
+}
+/* ============ LIMPIEZA / DEPURAR (admin) ============ */
+function openCleanup(){if(!isAdmin())return;$('cleanupOverlay').classList.add('show');renderCleanup()}
+function closeCleanup(){$('cleanupOverlay').classList.remove('show')}
+function renderCleanup(){
+  const noDate=db.filter(a=>!a.exp).length;
+  const bySvc={};db.forEach(a=>{const s=a.service||'—';bySvc[s]=(bySvc[s]||0)+1});
+  const svcs=Object.entries(bySvc).sort((a,b)=>b[1]-a[1]);
+  let html=`<div style="background:var(--panel);border:1px solid var(--line-soft);border-radius:12px;padding:14px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="flex:1"><b>Cuentas sin fecha de vencimiento:</b> ${noDate}</div>
+    ${noDate?`<button class="btn sm danger" onclick="deleteNoDate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg> Eliminar las ${noDate} sin fecha</button>`:'<span style="color:var(--txt-dim)">— nada que limpiar</span>'}
+  </div>
+  <div class="mini-label">Servicios (${svcs.length}) — marca los que NO sirven y elimínalos</div>
+  <div class="tbl-scroll" style="max-height:320px"><table class="dt"><thead><tr><th style="width:36px"></th><th>Servicio</th><th class="num">Cuentas</th></tr></thead><tbody>`+
+    svcs.map(([s,n])=>`<tr><td><input type="checkbox" class="clsvc" value="${esc(s)}" style="width:17px;height:17px;accent-color:var(--red)"></td><td>${esc(s)}</td><td class="num">${n}</td></tr>`).join('')+
+  `</tbody></table></div>
+  <button class="btn danger" style="margin-top:14px" onclick="deleteSelectedServices()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg> Eliminar servicios marcados</button>`;
+  $('cleanupBody').innerHTML=html;
+}
+async function _delByIds(ids){for(let i=0;i<ids.length;i+=200){const {error}=await supa.from('accounts').delete().in('id',ids.slice(i,i+200));if(error)throw error}}
+async function deleteNoDate(){
+  const ids=db.filter(a=>!a.exp).map(a=>a.id);if(!ids.length)return;
+  if(!confirm(`¿Eliminar ${ids.length} cuenta(s) SIN fecha de vencimiento?\nEs permanente.`))return;
+  try{await _delByIds(ids);db=db.filter(a=>a.exp);selected.clear();updateBulk();render();renderCleanup();toast(`${ids.length} sin fecha eliminadas`)}catch(e){toast(e.message||'Error','err')}
+}
+async function deleteSelectedServices(){
+  const sel=new Set([...document.querySelectorAll('#cleanupBody input.clsvc:checked')].map(c=>c.value));
+  if(!sel.size){toast('Marca al menos un servicio','err');return}
+  const ids=db.filter(a=>sel.has(a.service||'—')).map(a=>a.id);if(!ids.length)return;
+  if(!confirm(`¿Eliminar ${ids.length} cuenta(s) de: ${[...sel].join(', ')}?\nEs permanente.`))return;
+  try{await _delByIds(ids);db=db.filter(a=>!sel.has(a.service||'—'));selected.clear();updateBulk();render();renderCleanup();toast(`${ids.length} cuenta(s) eliminadas`)}catch(e){toast(e.message||'Error','err')}
 }
 async function delSale(id){if(!confirm('¿Eliminar este ingreso?'))return;const {error}=await supa.from('sales').delete().eq('id',id);if(error){toast(error.message,'err');return}sales=sales.filter(s=>s.id!==id);renderInc();renderDaily();toast('Ingreso eliminado')}
 async function delEgreso(id){if(!confirm('¿Eliminar este egreso?'))return;const {error}=await supa.from('egresos').delete().eq('id',id);if(error){toast(error.message,'err');return}egresos=egresos.filter(e=>e.id!==id);renderInc();toast('Egreso eliminado')}
