@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://*.supabase.co wss://*.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data:; base-uri 'none'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <title>JPSTORE · Gestor de Suscripciones</title>
 <link rel="icon" type="image/png" href="data:image/png;base64,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">
@@ -697,7 +697,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v2.3 · importacion HeyGen/Ultra + rendimiento';
+const APP_VERSION='v2.4 · fix importacion (guessServiceLine) + CSP';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
@@ -1250,6 +1250,20 @@ function scorePlans(p,text,expISO){
 function detectPlanIdx(productName,text,expISO){
   const p=findProduct(productName);if(!p||!p.plans||!p.plans.length)return -1;
   return scorePlans(p,text,expISO);
+}
+/* Último recurso: adivina el servicio por una línea corta tipo nombre (ej. "Netflix"),
+   ignorando líneas de datos (correo, clave, fecha, reglas, etc.) */
+function guessServiceLine(t){
+  const skip=/@|https?:|\d{2,}|correo|e-?mail|clave|contrase|pass|pin|vence|vencimiento|fecha|contacto|tel|cel|whatsapp|wsp|n[uú]mero|precio|costo|pago|monto|valor|jpstore|regla|admin|gmail|hotmail|outlook/i;
+  for(const raw of (t||'').split('\n')){
+    const line=raw.trim();
+    if(!line||skip.test(line))continue;
+    const words=line.split(/\s+/).filter(Boolean);
+    if(words.length>=1&&words.length<=4&&line.length>=3&&line.length<=40)
+      return words.map(w=>w.length>2?w[0].toUpperCase()+w.slice(1).toLowerCase():w.toUpperCase()).join(' ');
+    break;
+  }
+  return '';
 }
 function findService(text){for(const [re,name] of SERVICE_MATCHERS){if(re.test(text))return name}if(/\bmasuk\d*/i.test(text))return 'CapCut';const lbl=findAfterLabel(text,['servicio','plataforma','cuenta','producto','app','plan']);if(lbl&&!lbl.includes('@'))return lbl.split(/\s{2,}|·|\|/)[0].trim();return guessServiceLine(text)}
 function parseMessage(raw){
