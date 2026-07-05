@@ -697,7 +697,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v2.4 · fix importacion (guessServiceLine) + CSP';
+const APP_VERSION='v2.5 · importar solo faltantes (sin duplicar)';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
@@ -1901,21 +1901,19 @@ function parseWhatsAppExport(text){
   // sin teléfono no entra: pero solo DESPUÉS de fusionar, así una renovación
   // sin número hereda el teléfono del mensaje anterior del mismo correo
   const merged=[...[].concat(...byKey.values()),...byPhone.values()].filter(r=>r.email||r.phone);
-  // contra la base actual: si ya existe el correo, se marca como RENOVACIÓN
-  // (actualizará esa cuenta) si trae vencimiento más nuevo; si no, se omite
-  const dbByKey={};db.forEach(a=>{const e=(a.email||'').toLowerCase();if(!e)return;const k=e+'|'+(a.service||'').toLowerCase();(dbByKey[k]=dbByKey[k]||[]).push(a)});
+  // SOLO agregar las que faltan. Si ya existe (mismo correo+servicio+teléfono) se OMITE.
+  // NO actualiza nada (no son renovaciones). En cuentas compartidas cada teléfono es una persona distinta.
+  const norm=s=>(s||'').toLowerCase();
+  const dbKeys=new Set(),dbEmailSvc=new Set(),dbPhones=new Set();
+  db.forEach(a=>{const s=norm(a.service);const p=a.phone?waNumber(a.phone):'';const e=norm(a.email);if(e){dbKeys.add(e+'|'+s+'|'+p);dbEmailSvc.add(e+'|'+s)}if(p)dbPhones.add(s+'|'+p)});
   importDupes=0;const out=[];
   for(const r of merged){
-    let ex=null;
-    if(r.email){
-      const arr=dbByKey[(r.email||'').toLowerCase()+'|'+(r.service||'').toLowerCase()]||[];
-      const n=waNumber(r.phone);
-      ex=arr.find(a=>a.phone&&waNumber(a.phone)===n)||arr.find(a=>!a.phone)||null; // misma persona (o ficha sin tel)
-    }
-    if(ex){
-      if(r.exp&&(!ex.exp||r.exp>ex.exp)){r._update=ex.id;out.push(r)}
-      else importDupes++;
-    }else out.push(r);
+    const e=norm(r.email),s=norm(r.service),p=r.phone?waNumber(r.phone):'';
+    let yaExiste=false;
+    if(e)yaExiste=p?dbKeys.has(e+'|'+s+'|'+p):dbEmailSvc.has(e+'|'+s);
+    else if(p)yaExiste=dbPhones.has(s+'|'+p);
+    if(yaExiste){importDupes++;continue;}   // ya está → omitir (no duplicar, no renovar)
+    out.push(r);                             // no existe → agregar
   }
   importRows=out;importNoPhone=out.filter(r=>!r.phone).length;
   showReview();
