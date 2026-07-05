@@ -1838,11 +1838,13 @@ function parseWhatsAppExport(text){
   for(const b of blocks){
     if(/<multimedia omitido>|imagen omitida|se eliminó este mensaje|end-to-end|cifrados|sticker omitido|audio omitido|video omitido|gif omitido|llamada perdida/i.test(b.text))continue;
     // un mensaje puede traer VARIAS cuentas: separar por correos
+    const msgSvc=strictSvc(b.text);                   // servicio del mensaje completo (ej. HEYGEN en las reglas)
     for(const sub of parseBlocks(b.text)){
       const hasEmail=/[\w.+\-]+@[\w\-]+\.[\w.\-]+/.test(sub);
       const svcHit=strictSvc(sub);
       if(!hasEmail&&!svcHit)continue;                 // conversación normal → fuera
       const p=parseMessage(sub);
+      if(!svcHit&&msgSvc)p.service=msgSvc;            // hereda el servicio si el bloque no lo nombra pero el mensaje sí
       if(!p.phone&&!p.email)continue;                    // sin teléfono NI correo: inservible
       if(!p.email&&!p.exp&&!p.pass)continue;             // teléfono suelto sin datos → basura
       // el remitente del mensaje es el encargado, NO el cliente: no se usa
@@ -1884,7 +1886,7 @@ function parseWhatsAppExport(text){
   }
   // sin teléfono no entra: pero solo DESPUÉS de fusionar, así una renovación
   // sin número hereda el teléfono del mensaje anterior del mismo correo
-  const merged=[...[].concat(...byKey.values()),...byPhone.values()].filter(r=>r.phone);
+  const merged=[...[].concat(...byKey.values()),...byPhone.values()].filter(r=>r.email||r.phone);
   // contra la base actual: si ya existe el correo, se marca como RENOVACIÓN
   // (actualizará esa cuenta) si trae vencimiento más nuevo; si no, se omite
   const dbByKey={};db.forEach(a=>{const e=(a.email||'').toLowerCase();if(!e)return;const k=e+'|'+(a.service||'').toLowerCase();(dbByKey[k]=dbByKey[k]||[]).push(a)});
@@ -1904,7 +1906,7 @@ function parseWhatsAppExport(text){
   importRows=out;importNoPhone=out.filter(r=>!r.phone).length;
   showReview();
 }
-function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}const nUpd=importRows.filter(r=>r._update).length;revLimit=100;$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> cuenta(s) con teléfono ✓: <b>${importRows.length-nUpd}</b> nueva(s)${nUpd?` · <b style="color:var(--blue)">🔁 ${nUpd} renovación(es)</b> (en azul — actualizarán cuentas que ya tienes)`:''}${importDupes?` · ${importDupes} ya al día, omitida(s)`:''}. Solo se muestran de 100 en 100 para mantener todo fluido.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div><div id="revMore" style="text-align:center;margin-top:12px"></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
+function showReview(){if(!importRows.length){toast(importDupes?`Todas (${importDupes}) ya estaban registradas`:'No se detectaron cuentas','err');return}const nUpd=importRows.filter(r=>r._update).length;revLimit=100;$('importBody').innerHTML=`<p class="hint" style="margin:0 0 12px">Detectamos <b>${importRows.length}</b> cuenta(s)${importNoPhone?` (<b>${importNoPhone}</b> sin teléfono — complétalo si quieres)`:''}: <b>${importRows.length-nUpd}</b> nueva(s)${nUpd?` · <b style="color:var(--blue)">🔁 ${nUpd} renovación(es)</b> (en azul — actualizarán cuentas que ya tienes)`:''}${importDupes?` · ${importDupes} ya al día, omitida(s)`:''}. Solo se muestran de 100 en 100 para mantener todo fluido.</p><div class="tbl-scroll"><table class="dt"><thead><tr><th>Servicio</th><th>Cliente</th><th>Correo</th><th>Clave</th><th>Admin</th><th>Vence</th><th>Teléfono</th><th></th></tr></thead><tbody id="revBody"></tbody></table></div><div id="revMore" style="text-align:center;margin-top:12px"></div>`;drawReview();$('importFoot').style.display='flex';$('importCount').textContent=`${importRows.length} filas`}
 let revLimit=100;
 function drawReview(){$('revBody').innerHTML=importRows.slice(0,revLimit).map((r,i)=>`<tr${r._update?' style="background:rgba(96,165,250,.06)"':''}><td><input value="${esc(r.service)}" onchange="importRows[${i}].service=this.value"></td><td><input value="${esc(r.client)}" onchange="importRows[${i}].client=this.value"></td><td><input value="${esc(r.email)}" onchange="importRows[${i}].email=this.value"></td><td><input value="${esc(r.pass)}" onchange="importRows[${i}].pass=this.value"></td><td><input value="${esc(r.admin_email)}" onchange="importRows[${i}].admin_email=this.value"></td><td><input type="date" value="${esc(r.exp)}" onchange="importRows[${i}].exp=this.value"></td><td><input value="${esc(r.phone)}" class="${r.phone?'':'missing'}" onchange="importRows[${i}].phone=this.value;this.classList.toggle('missing',!this.value.trim())"></td><td><button class="rm" onclick="importRows.splice(${i},1);drawReview();document.getElementById('importCount').textContent=importRows.length+' filas'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="15" height="15"><path d="M18 6L6 18M6 6l12 12"/></svg></button></td></tr>`).join('');const rm=$('revMore');if(rm)rm.innerHTML=importRows.length>revLimit?`<button class="btn sm" onclick="revLimit+=300;drawReview()">Mostrar 300 más (${importRows.length-revLimit} restantes)</button>`:''}
 async function confirmImport(){
