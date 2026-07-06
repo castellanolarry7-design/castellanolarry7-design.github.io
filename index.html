@@ -668,6 +668,12 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
 <div class="overlay" id="batchOverlay"><div class="modal">
   <div class="modal-head"><div><h3>Escribir renovaciones</h3><p id="batchSub"></p></div><button class="x" onclick="closeBatch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
   <div class="modal-body">
+    <div class="seg" style="margin-bottom:10px" id="batchStatusSeg">
+      <button data-bs="" class="on" onclick="setBatchStatus('')">Todos</button>
+      <button data-bs="expired" onclick="setBatchStatus('expired')">Vencidas</button>
+      <button data-bs="today" onclick="setBatchStatus('today')">Hoy</button>
+      <button data-bs="soon" onclick="setBatchStatus('soon')">Por vencer</button>
+    </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
       <span class="mini-label" style="margin:0;flex-shrink:0">Vencen del</span>
       <input class="filter" type="date" id="bFrom" onchange="applyBatchFilter()" style="flex:1;min-width:130px">
@@ -704,7 +710,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v3.0 · limpieza: sin fecha y por servicio';
+const APP_VERSION='v3.1 · egreso instantaneo + filtros en renovaciones';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
@@ -1520,13 +1526,25 @@ async function saveManual(){
   const type=$('mType').value,concept=get('mConcept')||(type==='ingreso'?'Ingreso manual':'Egreso'),date=get('mDate')||todayISO();
   const usd=parseFloat(get('mUSD'))||0;let bs=parseFloat(get('mBs'))||0;if(!bs&&usd)bs=usd*cfg.rate;
   if(!bs){toast('Indica un monto','err');return}
+  closeManual();
+  // Optimista: se muestra al instante y se guarda en la base por detrás (no se queda pegado)
+  const tmpId='tmp_'+uid();
+  const dbRec=type==='ingreso'
+    ? {date,account_id:null,product:'(manual)',client:concept,plan:'',qty:1,price_usd:usd||bs/cfg.rate,cost_usd:0,rate:cfg.rate,manual_bs:bs}
+    : {date,concept,monto_usd:usd,monto_bs:bs,rate:cfg.rate};
+  const arr=type==='ingreso'?sales:egresos;
+  arr.push({id:tmpId,...dbRec});
+  renderInc();renderDaily();
+  const[pf,pt]=periodRange();
+  toast(inRange(date,pf,pt)?'Guardado ✓':'Guardado ✓ — fuera del periodo filtrado; usa "Todo" para verlo');
   try{
-    if(type==='ingreso'){const rec={date,account_id:null,product:'(manual)',client:concept,plan:'',qty:1,price_usd:usd||bs/cfg.rate,cost_usd:0,rate:cfg.rate,manual_bs:bs};const {data,error}=await supa.from('sales').insert(rec).select().single();if(error)throw error;sales.push(data)}
-    else{const rec={date,concept,monto_usd:usd,monto_bs:bs,rate:cfg.rate};const {data,error}=await supa.from('egresos').insert(rec).select().single();if(error)throw error;egresos.push(data)}
-    closeManual();renderInc();renderDaily();
-    const[pf,pt]=periodRange();
-    toast(inRange(date,pf,pt)?'Movimiento guardado':'Guardado ✓ — está fuera del periodo filtrado; cambia a "Todo" para verlo');
-  }catch(e){toast(e.message||'Error','err')}
+    const {data,error}=await supa.from(type==='ingreso'?'sales':'egresos').insert(dbRec).select().single();
+    if(error)throw error;
+    const i=arr.findIndex(x=>x.id===tmpId);if(i>=0)arr[i]=data;
+  }catch(e){
+    const i=arr.findIndex(x=>x.id===tmpId);if(i>=0)arr.splice(i,1);
+    renderInc();renderDaily();toast('No se pudo guardar: '+(e.message||e),'err');
+  }
 }
 
 /* ============ INCOME VIEW (admin) ============ */
@@ -1785,6 +1803,8 @@ function buildBatchFilter(items){
 }
 /* Con rango de fechas: la cola son TODAS las cuentas (con teléfono, sin contactar)
    cuyo vencimiento cae en el rango — ideal para trabajar el día a día */
+let batchStatus='';
+function setBatchStatus(s){batchStatus=s;document.querySelectorAll('#batchStatusSeg button').forEach(b=>b.classList.toggle('on',b.dataset.bs===s));applyBatchFilter(false)}
 function batchPool(){
   const f=$('bFrom')?$('bFrom').value:'',t=$('bTo')?$('bTo').value:'';
   if(f||t){
@@ -1797,7 +1817,7 @@ function applyBatchFilter(rebuild){
   const pool=batchPool();
   if(rebuild!==false)buildBatchFilter(pool);
   const v=$('batchPlanF').value;
-  batchQueue=pool.filter(r=>{const m=planMonthsOf(r);return !v||(v==='other'?m==null:m===Number(v))});
+  batchQueue=pool.filter(r=>{const m=planMonthsOf(r);const okPlan=!v||(v==='other'?m==null:m===Number(v));if(!okPlan)return false;if(batchStatus){const k=statusOf(r.exp).key;if(batchStatus==='expired')return k==='expired';if(batchStatus==='today')return k==='today';if(batchStatus==='soon')return k==='soon'||k==='today';}return true;});
   batchIdx=0;drawQueue();
   const f=$('bFrom')?$('bFrom').value:'',t=$('bTo')?$('bTo').value:'';
   $('batchSub').textContent=`${batchQueue.length} cliente(s) en la cola${(f||t)?` — vencen ${f?'desde '+fmtDate(f):''}${f&&t?' ':''}${t?'hasta '+fmtDate(t):''}`:' — vencidas primero'}.`;
@@ -1827,8 +1847,9 @@ function startBatch(mode){
   if(mode==='selected')items=db.filter(r=>selected.has(r.id)).filter(r=>r.phone);
   else if(mode==='urgent')items=urgentList();
   if(!items.length){toast(mode==='urgent'?'🎉 Nada pendiente: no hay vencidas ni por vencer sin contactar (con teléfono)':'Ninguna seleccionada tiene teléfono','err');return}
-  batchAll=items;batchQueue=items;batchIdx=0;
+  batchAll=items;batchQueue=items;batchIdx=0;batchStatus='';
   if($('bFrom'))$('bFrom').value='';if($('bTo'))$('bTo').value='';
+  document.querySelectorAll('#batchStatusSeg button').forEach(b=>b.classList.toggle('on',b.dataset.bs===''));
   $('batchOverlay').classList.add('show');
   $('batchSub').textContent=mode==='urgent'?`${items.length} cliente(s) por renovar — vencidas primero.`:'Se abrirá WhatsApp con el mensaje listo para cada cliente.';
   buildBatchFilter(items);
