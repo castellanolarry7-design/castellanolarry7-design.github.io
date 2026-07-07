@@ -402,6 +402,8 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   .parse-cols,.field-grid,.field-grid.three{grid-template-columns:1fr}
   .modal.wide{max-width:560px}
   .tabs button span{display:none}
+  .top-in{flex-wrap:wrap;row-gap:8px}
+  .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
 }
 
 @media(max-width:640px){
@@ -444,16 +446,23 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   .card-foot .btn{padding:11px;min-height:42px}
   .row .copy{opacity:.6}  /* visible en táctil: no hay hover */
   .bulkbar{flex-wrap:wrap}
-  /* Modales casi a pantalla completa */
-  .overlay{padding:10px 8px}
-  .modal{border-radius:var(--r-lg)}
-  .modal-head{padding:var(--s4)}
+  /* Modales: se ajustan a la pantalla y el pie (botones) queda SIEMPRE visible */
+  .overlay{padding:8px;align-items:center}
+  .modal,.modal.wide{max-width:none;border-radius:var(--r-lg);display:flex;flex-direction:column;
+    max-height:88vh;max-height:calc(100dvh - 16px)}
+  .modal-head{padding:var(--s4);flex-shrink:0}
   .modal-head h3{font-size:17px}
-  .modal-body{padding:var(--s4);max-height:80vh}
-  .modal-foot{padding:13px var(--s4)}
+  .modal-body{padding:var(--s4);max-height:none;flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .modal-foot{padding:13px var(--s4);flex-shrink:0;padding-bottom:calc(13px + env(safe-area-inset-bottom,0px))}
   .modal-foot .btn{flex:1;justify-content:center;padding:13px}
   .field input,.field select,.field textarea{padding:13px 14px;font-size:16px} /* 16px evita zoom iOS */
+  #pasteInput{font-size:16px!important;min-height:170px} /* evita el zoom al seleccionar y ahorra espacio */
   .seg{width:100%}.seg button{flex:1}
+  /* Menú superior: no se descuadra al alejar el zoom — envuelve y las pestañas se deslizan si no caben */
+  .top-in{flex-wrap:wrap;row-gap:8px}
+  .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex-shrink:0}
   .fab{display:flex}
 }
 </style>
@@ -710,7 +719,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v3.1 · egreso instantaneo + filtros en renovaciones';
+const APP_VERSION='v3.2 · movil: modales con boton siempre visible + menu sin descuadre';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
