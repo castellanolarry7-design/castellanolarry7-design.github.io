@@ -458,13 +458,13 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   .field input,.field select,.field textarea{padding:13px 14px;font-size:16px} /* 16px evita zoom iOS */
   #pasteInput{font-size:16px!important;min-height:170px} /* evita el zoom al seleccionar y ahorra espacio */
   .seg{width:100%}.seg button{flex:1}
-  /* Menú superior en móvil: logo + JPSTORE centrado arriba, y debajo (centrados) las pestañas y los botones */
-  .top-in{flex-wrap:wrap;row-gap:10px;justify-content:center;padding:12px 14px}
+  /* Menú superior en móvil: logo centrado arriba (fila 1); pestañas + botones juntos y centrados debajo (fila 2) */
+  .top-in{flex-wrap:wrap;row-gap:9px;justify-content:center;padding:11px 14px}
   .brand{flex:1 1 100%;justify-content:center;gap:10px}
-  .tabs{flex:1 1 100%;justify-content:center;margin-left:0;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .tabs{margin-left:0;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
   .tabs button{flex-shrink:0}
-  .top-actions{flex:1 1 100%;justify-content:center;margin-left:0;flex-wrap:wrap}
+  .top-actions{margin-left:0;flex-wrap:wrap;justify-content:center}
   .fab{display:flex}
 }
 </style>
@@ -721,7 +721,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v3.3 · movil: logo centrado arriba, pestañas y botones centrados abajo';
+const APP_VERSION='v3.4 · movil: 2 filas — logo arriba, pestañas + botones juntos abajo';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
