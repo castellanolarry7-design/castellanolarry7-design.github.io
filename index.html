@@ -458,11 +458,13 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
   .field input,.field select,.field textarea{padding:13px 14px;font-size:16px} /* 16px evita zoom iOS */
   #pasteInput{font-size:16px!important;min-height:170px} /* evita el zoom al seleccionar y ahorra espacio */
   .seg{width:100%}.seg button{flex:1}
-  /* Menú superior: no se descuadra al alejar el zoom — envuelve y las pestañas se deslizan si no caben */
-  .top-in{flex-wrap:wrap;row-gap:8px}
-  .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;scrollbar-width:none}
+  /* Menú superior en móvil: logo + JPSTORE centrado arriba, y debajo (centrados) las pestañas y los botones */
+  .top-in{flex-wrap:wrap;row-gap:10px;justify-content:center;padding:12px 14px}
+  .brand{flex:1 1 100%;justify-content:center;gap:10px}
+  .tabs{flex:1 1 100%;justify-content:center;margin-left:0;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
   .tabs button{flex-shrink:0}
+  .top-actions{flex:1 1 100%;justify-content:center;margin-left:0;flex-wrap:wrap}
   .fab{display:flex}
 }
 </style>
@@ -719,7 +721,7 @@ table.dt input,table.dt select{width:100%;padding:7px 9px;background:var(--surf-
    CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
    (Supabase → Project Settings → API)
    ================================================================== */
-const APP_VERSION='v3.2 · movil: modales con boton siempre visible + menu sin descuadre';
+const APP_VERSION='v3.3 · movil: logo centrado arriba, pestañas y botones centrados abajo';
 console.log('JPSTORE '+APP_VERSION);
 const SUPABASE_URL = "https://lmhxisutxwncpieekghg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtaHhpc3V0eHduY3BpZWVrZ2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQ1MTAsImV4cCI6MjA5ODUwMDUxMH0.JD_v0ebV7VmkZW_NxZonANe0OoSCf9iX1aH_zw5eCqs";
